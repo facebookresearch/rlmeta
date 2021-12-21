@@ -1,0 +1,7 @@
+gym
+hydra-core
+numpy
+opencv-python
+tabulate
+torch>=1.5.1
+moolib@git+https://github.com/facebookresearch/moolib

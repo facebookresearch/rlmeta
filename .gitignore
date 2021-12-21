@@ -1,0 +1,7 @@
+**/.cache/*
+**/__pycache__/*
+**/build/*
+*.egg-info/*
+*.so
+compile_commands.json
+**/outputs/*
