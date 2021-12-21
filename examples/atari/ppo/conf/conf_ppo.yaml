@@ -1,0 +1,35 @@
+m_server_name: "m_server"
+m_server_addr: "127.0.0.1:4411"
+
+r_server_name: "r_server"
+r_server_addr: "127.0.0.1:4412"
+
+c_server_name: "c_server"
+c_server_addr: "127.0.0.1:4413"
+
+train_device: "cuda:0"
+infer_device: "cuda:1"
+
+env: "PongNoFrameskip-v4"
+max_episode_steps: 2700
+
+num_train_rollouts: 32
+num_train_workers: 16
+
+num_eval_rollouts: 16
+num_eval_workers: 8
+
+replay_buffer_size: 131072
+prefetch: 2
+
+batch_size: 512
+lr: 3e-4
+push_every_n_steps: 10
+
+num_epochs: 1000
+steps_per_epoch: 3000
+
+num_eval_episodes: 100
+
+train_seed: 123
+eval_seed: 456
