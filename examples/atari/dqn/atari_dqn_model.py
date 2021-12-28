@@ -18,8 +18,9 @@ from rlmeta.core.types import NestedTensor
 
 
 class AtariDQNNet(nn.Module):
-    def __init__(self, dueling_dqn: bool = True) -> None:
+    def __init__(self, action_dim: int, dueling_dqn: bool = True) -> None:
         super().__init__()
+        self.action_dim = action_dim
         self.dueling_dqn = dueling_dqn
 
         layers = []
@@ -33,7 +34,7 @@ class AtariDQNNet(nn.Module):
         layers.append(nn.Linear(3136, 512))
         layers.append(nn.ReLU())
         self.backbone = nn.Sequential(*layers)
-        self.linear_a = nn.Linear(512, 6)
+        self.linear_a = nn.Linear(512, self.action_dim)
         self.linear_v = nn.Linear(512, 1) if dueling_dqn else None
 
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
@@ -49,13 +50,15 @@ class AtariDQNNet(nn.Module):
 
 class AtariDQNModel(DQNModel):
     def __init__(self,
+                 action_dim: int,
                  double_dqn: bool = True,
                  dueling_dqn: bool = True) -> None:
         super().__init__()
+        self.action_dim = action_dim
         self.double_dqn = double_dqn
         self.dueling_dqn = dueling_dqn
 
-        self.online_net = AtariDQNNet()
+        self.online_net = AtariDQNNet(self.action_dim)
         self.target_net = copy.deepcopy(
             self.online_net) if double_dqn else None
 

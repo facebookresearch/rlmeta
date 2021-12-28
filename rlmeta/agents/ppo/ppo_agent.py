@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 
 import rlmeta_extension.nested_utils as nested_utils
+import rlmeta.utils.data_utils as data_utils
 
 from typing import Dict, List, Optional, Tuple
 
@@ -16,9 +17,10 @@ from rlmeta.agents.agent import Agent
 from rlmeta.core.controller import Controller, ControllerLike, Phase
 from rlmeta.core.model import ModelLike
 from rlmeta.core.replay_buffer import ReplayBufferLike
+from rlmeta.core.rescaler import NormRescaler
 from rlmeta.core.types import Action, TimeStep
 from rlmeta.core.types import Tensor, NestedTensor
-from rlmeta.utils.stats_utils import StatsDict
+from rlmeta.utils.stats_dict import StatsDict
 
 
 class PPOAgent(Agent):
@@ -34,8 +36,9 @@ class PPOAgent(Agent):
                  gae_lambda: float = 0.95,
                  eps_clip: float = 0.2,
                  entropy_ratio: float = 0.01,
-                 value_clip: bool = True,
                  advantage_normalization: bool = True,
+                 reward_rescaling: bool = True,
+                 value_clip: bool = True,
                  push_every_n_steps: int = 1) -> None:
         super(PPOAgent, self).__init__()
 
@@ -53,8 +56,11 @@ class PPOAgent(Agent):
         self.gae_lambda = gae_lambda
         self.eps_clip = eps_clip
         self.entropy_ratio = entropy_ratio
-        self.value_clip = value_clip
         self.advantage_normalization = advantage_normalization
+        self.reward_rescaling = reward_rescaling
+        if self.reward_rescaling:
+            self.reward_rescaler = NormRescaler(size=1)
+        self.value_clip = value_clip
 
         self.push_every_n_steps = push_every_n_steps
         self.done = False
@@ -147,14 +153,26 @@ class PPOAgent(Agent):
     def make_replay(self) -> List[NestedTensor]:
         v = 0.0
         gae = 0.0
+        ret = []
         for cur in reversed(self.trajectory):
             reward = cur.pop("reward")
             v_ = v
             v = cur["v"]
+            if self.reward_rescaling:
+                v = self.reward_rescaler.recover(v)
             delta = reward + self.gamma * v_ - v
             gae = delta + self.gamma * self.gae_lambda * gae
             cur["gae"] = gae
-            cur["return"] = gae + v
+            ret.append(gae + v)
+
+        if self.reward_rescaling:
+            ret = data_utils.stack_tensors(ret)
+            self.reward_rescaler.update(ret)
+            ret = self.reward_rescaler.rescale(ret)
+            ret = ret.unbind()
+        for cur, r in zip(self.trajectory, reversed(ret)):
+            cur["return"] = r
+
         return self.trajectory
 
     def train_step(self, batch: NestedTensor) -> Dict[str, float]:

@@ -14,7 +14,7 @@ from typing import Any, Optional, Type
 
 from rlmeta.core.types import Action, TimeStep
 from rlmeta.core.types import NestedTensor
-from rlmeta.utils.stats_utils import StatsDict
+from rlmeta.utils.stats_dict import StatsDict
 
 
 class Agent(abc.ABC):
