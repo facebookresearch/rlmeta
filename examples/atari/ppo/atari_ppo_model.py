@@ -15,8 +15,9 @@ from rlmeta.agents.ppo.ppo_model import PPOModel
 
 
 class AtariPPOModel(PPOModel):
-    def __init__(self) -> None:
+    def __init__(self, action_dim: int) -> None:
         super().__init__()
+        self.action_dim = action_dim
 
         layers = []
         layers.append(nn.Conv2d(4, 32, kernel_size=8, stride=4))
@@ -29,7 +30,7 @@ class AtariPPOModel(PPOModel):
         layers.append(nn.Linear(3136, 512))
         layers.append(nn.ReLU())
         self.backbone = nn.Sequential(*layers)
-        self.linear_p = nn.Linear(512, 6)
+        self.linear_p = nn.Linear(512, self.action_dim)
         self.linear_v = nn.Linear(512, 1)
 
     def forward(self, obs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:

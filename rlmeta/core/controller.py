@@ -8,7 +8,7 @@ import rlmeta.core.remote as remote
 from enum import IntEnum
 from typing import Dict, Optional, Union
 
-from rlmeta.utils.stats_utils import StatsDict
+from rlmeta.utils.stats_dict import StatsDict
 
 
 class Phase(IntEnum):

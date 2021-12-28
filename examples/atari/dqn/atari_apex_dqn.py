@@ -12,6 +12,7 @@ import torch
 import torch.multiprocessing as mp
 
 import rlmeta.core.remote as remote
+import rlmeta.envs.atari_wrappers as atari_wrappers
 import rlmeta.envs.gym_wrappers as gym_wrappers
 import rlmeta.utils.remote_utils as remote_utils
 
@@ -31,7 +32,8 @@ from rlmeta.core.server import Server, ServerList
 def main(cfg):
     logging.info(f"ApeX-DQN configs = {cfg}")
 
-    train_model = AtariDQNModel().to(cfg.train_device)
+    env = atari_wrappers.make_atari(cfg.env)
+    train_model = AtariDQNModel(env.action_space.n).to(cfg.train_device)
     optimizer = torch.optim.Adam(train_model.parameters(), lr=cfg.lr)
 
     infer_model = copy.deepcopy(train_model).to(cfg.infer_device)

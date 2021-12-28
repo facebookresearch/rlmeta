@@ -86,3 +86,7 @@ class SumSegmentTreeTest(TestCaseBase):
             ret = t.query(l, r)
             ans = self.data[l:r].sum().item()
             self.assertAlmostEqual(ret, ans, places=5)
+
+
+if __name__ == "__main__":
+    unittest.main()
