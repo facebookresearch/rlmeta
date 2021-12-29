@@ -164,9 +164,9 @@ class AsyncLoop(Loop, Launchable):
                            agent: Agent,
                            index: int = 0) -> Optional[Dict[str, float]]:
         episode_length = 0
-        episode_reward = 0.0
+        episode_return = 0.0
 
-        start_time = time.time()
+        start_time = time.perf_counter()
 
         timestep = env.reset()
         await agent.async_observe_init(timestep)
@@ -181,14 +181,14 @@ class AsyncLoop(Loop, Launchable):
                 await agent.async_update()
 
             episode_length += 1
-            episode_reward += timestep.reward
+            episode_return += timestep.reward
 
-        episode_time = time.time() - start_time
+        episode_time = time.perf_counter() - start_time
         steps_per_second = episode_length / episode_time
 
         return {
             "episode_length": float(episode_length),
-            "episode_reward": episode_reward,
+            "episode_return": episode_return,
             "episode_time/s": episode_time,
             "steps_per_second": steps_per_second,
         }

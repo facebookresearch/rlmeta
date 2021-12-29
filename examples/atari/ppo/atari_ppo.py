@@ -28,7 +28,7 @@ from rlmeta.core.server import Server, ServerList
 
 @hydra.main(config_path="./conf", config_name="conf_ppo")
 def main(cfg):
-    logging.info(f"PPO configs = {cfg}")
+    logging.info(cfg)
 
     env = atari_wrappers.make_atari(cfg.env)
     train_model = AtariPPOModel(env.action_space.n).to(cfg.train_device)

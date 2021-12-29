@@ -121,11 +121,11 @@ class PPOAgent(Agent):
         self.replay_buffer.warm_up()
         stats = StatsDict()
         for step in range(num_steps):
-            t0 = time.time()
+            t0 = time.perf_counter()
             batch = self.replay_buffer.sample(self.batch_size)
-            t1 = time.time()
+            t1 = time.perf_counter()
             step_stats = self.train_step(batch)
-            t2 = time.time()
+            t2 = time.perf_counter()
             time_stats = {
                 "sample_data_time/ms": (t1 - t0) * 1000.0,
                 "batch_learn_time/ms": (t2 - t1) * 1000.0,

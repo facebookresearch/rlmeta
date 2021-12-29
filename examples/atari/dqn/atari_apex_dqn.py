@@ -5,6 +5,7 @@
 
 import copy
 import hydra
+import json
 import logging
 import time
 
@@ -30,7 +31,7 @@ from rlmeta.core.server import Server, ServerList
 
 @hydra.main(config_path="./conf", config_name="conf_apex_dqn")
 def main(cfg):
-    logging.info(f"ApeX-DQN configs = {cfg}")
+    logging.info(cfg)
 
     env = atari_wrappers.make_atari(cfg.env)
     train_model = AtariDQNModel(env.action_space.n).to(cfg.train_device)
