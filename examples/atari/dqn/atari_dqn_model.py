@@ -14,6 +14,7 @@ import rlmeta.core.remote as remote
 from typing import Tuple
 
 from rlmeta.agents.dqn.dqn_model import DQNModel
+from rlmeta.core.rescaler import SqrtRescaler
 from rlmeta.core.types import NestedTensor
 
 
@@ -52,15 +53,20 @@ class AtariDQNModel(DQNModel):
     def __init__(self,
                  action_dim: int,
                  double_dqn: bool = True,
-                 dueling_dqn: bool = True) -> None:
+                 dueling_dqn: bool = True,
+                 reward_rescaling: bool = True) -> None:
         super().__init__()
         self.action_dim = action_dim
         self.double_dqn = double_dqn
         self.dueling_dqn = dueling_dqn
+        self.reward_rescaling = reward_rescaling
 
         self.online_net = AtariDQNNet(self.action_dim)
         self.target_net = copy.deepcopy(
             self.online_net) if double_dqn else None
+
+        if self.reward_rescaling:
+            self.rescaler = SqrtRescaler()
 
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
         return self.online_net(obs)
@@ -104,7 +110,11 @@ class AtariDQNModel(DQNModel):
                 q_next = q_next.gather(dim=-1, index=a_next)
             else:
                 q_next = q_next.max(-1, keepdim=True)[0]
+            if self.reward_rescaling:
+                q_next = self.rescaler.recover(q_next)
             y = torch.where(done, reward, reward + gamma * q_next)
+            if self.reward_rescaling:
+                y = self.rescaler.rescale(y)
 
         return (y - q).squeeze(-1)
 
