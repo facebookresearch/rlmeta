@@ -18,7 +18,7 @@ template <class Function>
 void VisitNestedImpl(Function func, const py::object& obj) {
   if (py::isinstance<py::tuple>(obj)) {
     const py::tuple src = py::reinterpret_borrow<py::tuple>(obj);
-    for (const auto& x : src) {
+    for (const auto x : src) {
       VisitNestedImpl(func, py::reinterpret_borrow<py::object>(x));
     }
     return;
@@ -26,7 +26,7 @@ void VisitNestedImpl(Function func, const py::object& obj) {
 
   if (py::isinstance<py::list>(obj)) {
     const py::list src = py::reinterpret_borrow<py::list>(obj);
-    for (const auto& x : src) {
+    for (const auto x : src) {
       VisitNestedImpl(func, py::reinterpret_borrow<py::object>(x));
     }
     return;
@@ -34,7 +34,7 @@ void VisitNestedImpl(Function func, const py::object& obj) {
 
   if (py::isinstance<py::dict>(obj)) {
     const py::dict src = py::reinterpret_borrow<py::dict>(obj);
-    for (const auto& [k, v] : src) {
+    for (const auto [k, v] : src) {
       VisitNestedImpl(func, py::reinterpret_borrow<py::object>(v));
     }
     return;
@@ -52,7 +52,7 @@ py::object MapNestedImpl(Function func, const py::object& obj) {
     for (int64_t i = 0; i < n; ++i) {
       dst[i] = MapNestedImpl(func, src[i]);
     }
-    return dst;
+    return std::move(dst);
   }
 
   if (py::isinstance<py::list>(obj)) {
@@ -62,16 +62,16 @@ py::object MapNestedImpl(Function func, const py::object& obj) {
     for (int64_t i = 0; i < n; ++i) {
       dst[i] = MapNestedImpl(func, src[i]);
     }
-    return dst;
+    return std::move(dst);
   }
 
   if (py::isinstance<py::dict>(obj)) {
     const py::dict src = py::reinterpret_borrow<py::dict>(obj);
     py::dict dst;
-    for (const auto& [k, v] : src) {
+    for (const auto [k, v] : src) {
       dst[k] = MapNestedImpl(func, py::reinterpret_borrow<py::object>(v));
     }
-    return dst;
+    return std::move(dst);
   }
 
   return func(obj);
@@ -150,12 +150,12 @@ py::tuple UnbatchNestedImpl(std::function<py::tuple(const py::object&)> func,
     for (int64_t i = 0; i < batch_size; ++i) {
       dst[i] = py::dict();
     }
-    for (const auto& [k, v] : src) {
+    for (const auto [k, v] : src) {
       py::tuple cur = UnbatchNestedImpl(
           func, py::reinterpret_borrow<py::object>(v), batch_size);
       for (int64_t i = 0; i < batch_size; ++i) {
         py::dict y = py::reinterpret_borrow<py::dict>(dst[i]);
-        y[k] = std::move(cur[i]);
+        y[k] = cur[i];
       }
     }
     return dst;
