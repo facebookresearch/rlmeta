@@ -16,8 +16,8 @@ max_episode_steps: 2700
 num_train_rollouts: 32
 num_train_workers: 16
 
-num_eval_rollouts: 16
-num_eval_workers: 8
+num_eval_rollouts: 8
+num_eval_workers: 4
 
 train_eps: 0.4
 eval_eps: 0.01
@@ -36,7 +36,7 @@ push_every_n_steps: 10
 num_epochs: 1000
 steps_per_epoch: 3000
 
-num_eval_episodes: 100
+num_eval_episodes: 20
 
 train_seed: 123
 eval_seed: 456

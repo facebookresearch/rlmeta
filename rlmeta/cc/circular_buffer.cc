@@ -52,7 +52,7 @@ py::tuple CircularBuffer::DumpData() const {
 
 void CircularBuffer::LoadData(const py::tuple& src, int64_t cursor) {
   Reset();
-  for (const auto& o : src) {
+  for (const auto o : src) {
     data_.push_back(py::reinterpret_borrow<py::object>(o));
   }
   cursor_ = cursor;
