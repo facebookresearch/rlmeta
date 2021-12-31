@@ -116,7 +116,7 @@ class PPOAgent(Agent):
         self.trajectory = []
 
     def train(self, num_steps: int) -> Optional[StatsDict]:
-        self.controller.set_phase(Phase.TRAIN)
+        self.controller.set_phase(Phase.TRAIN, reset=True)
 
         self.replay_buffer.warm_up()
         stats = StatsDict()
@@ -137,17 +137,15 @@ class PPOAgent(Agent):
                 self.model.push()
 
         episode_stats = self.controller.get_stats()
-        self.controller.reset()
         stats.update(episode_stats)
 
         return stats
 
     def eval(self, num_episodes: Optional[int] = None) -> Optional[StatsDict]:
-        self.controller.set_phase(Phase.EVAL, limit=num_episodes)
+        self.controller.set_phase(Phase.EVAL, limit=num_episodes, reset=True)
         while self.controller.get_count() < num_episodes:
             time.sleep(1)
         stats = self.controller.get_stats()
-        self.controller.reset()
         return stats
 
     def make_replay(self) -> List[NestedTensor]:

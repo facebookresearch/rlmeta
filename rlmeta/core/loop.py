@@ -15,6 +15,7 @@ import torch
 import torch.multiprocessing as mp
 
 import rlmeta.core.remote as remote
+import rlmeta.utils.asycio_utils as asycio_utils
 import rlmeta.utils.moolib_utils as moolib_utils
 
 from typing import Dict, List, NoReturn, Optional, Sequence, Union
@@ -125,16 +126,17 @@ class AsyncLoop(Loop, Launchable):
 
     def run(self) -> NoReturn:
         self._loop = asyncio.get_event_loop()
-        self._tasks.append(self._loop.create_task(self._check_phase()))
+        self._tasks.append(
+            asycio_utils.create_task(self._loop, self._check_phase()))
         for i, (env, agent) in enumerate(zip(self._envs, self._agents)):
-            task = self._loop.create_task(
-                self._run_loop(env, agent, self.index_offset + i))
+            task = asycio_utils.create_task(
+                self._loop, self._run_loop(env, agent, self.index_offset + i))
             self._tasks.append(task)
         try:
             self._loop.run_forever()
         except Exception as e:
             logging.error(e)
-            raise
+            raise e
         finally:
             for task in self._tasks:
                 task.cancel()

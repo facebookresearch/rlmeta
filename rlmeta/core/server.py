@@ -12,6 +12,8 @@ import moolib
 import torch
 import torch.multiprocessing as mp
 
+import rlmeta.utils.asycio_utils as asycio_utils
+
 from typing import Any, Callable, List, NoReturn, Optional, Sequence, Union
 
 from rlmeta.core.launchable import Launchable
@@ -106,7 +108,8 @@ class Server(Launchable):
             que = self._server.define_queue(func_name,
                                             batch_size=batch_size,
                                             dynamic_batching=True)
-        task = self._loop.create_task(self._async_process(que, func_impl))
+        task = asycio_utils.create_task(self._loop,
+                                        self._async_process(que, func_impl))
         self._tasks.append(task)
 
     async def _async_process(self, que: moolib.Queue,
@@ -120,7 +123,7 @@ class Server(Launchable):
             pass
         except Exception as e:
             logging.error(e)
-            raise
+            raise e
 
 
 class ServerList:
