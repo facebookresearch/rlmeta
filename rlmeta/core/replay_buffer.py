@@ -7,14 +7,14 @@ import collections
 import time
 import logging
 
+from typing import Callable, Optional, Sequence, Tuple, Union
+
 import numpy as np
 import torch
 
 import rlmeta.core.remote as remote
 import rlmeta.utils.data_utils as data_utils
 import rlmeta_extension.nested_utils as nested_utils
-
-from typing import Any, Callable, Optional, Sequence, Tuple, Union
 
 from rlmeta.core.launchable import Launchable
 from rlmeta.core.segment_tree import SumSegmentTree, MinSegmentTree
@@ -24,6 +24,7 @@ from rlmeta_extension import CircularBuffer
 
 
 class ReplayBuffer(remote.Remotable, Launchable):
+
     def __init__(self,
                  capacity: int,
                  collate_fn: Optional[Callable[[Sequence[NestedTensor]],
@@ -90,6 +91,7 @@ class ReplayBuffer(remote.Remotable, Launchable):
 
 
 class PrioritizedReplayBuffer(ReplayBuffer):
+
     def __init__(self,
                  capacity: int,
                  alpha: float,
@@ -153,8 +155,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
     @remote.remote_method(batch_size=None)
     def sample(
-            self, batch_size: int
-    ) -> Tuple[NestedTensor, torch.Tensor, torch.Tensor]:
+            self,
+            batch_size: int) -> Tuple[NestedTensor, torch.Tensor, torch.Tensor]:
         data, weight, index = self._sample(batch_size)
         return data, weight, torch.from_numpy(index)
 
@@ -244,6 +246,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
 
 class RemoteReplayBuffer(remote.Remote):
+
     def __init__(self,
                  target: ReplayBuffer,
                  server_name: str,

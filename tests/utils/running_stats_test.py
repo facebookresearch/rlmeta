@@ -12,6 +12,7 @@ from tests.test_utils import TestCaseBase
 
 
 class RunningStatsTest(TestCaseBase):
+
     def setUp(self) -> None:
         self.outer_size = 10
         self.inner_size = (4, 5)

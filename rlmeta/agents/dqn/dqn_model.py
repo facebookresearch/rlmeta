@@ -13,6 +13,7 @@ from rlmeta.core.types import NestedTensor
 
 
 class DQNModel(RemotableModel):
+
     @abc.abstractmethod
     def forward(self, obs: torch.Tensor, *args, **kwargs) -> torch.Tensor:
         """

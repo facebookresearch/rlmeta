@@ -3,11 +3,10 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import numpy as np
-
-import torch
-
 from typing import Union
+
+import numpy as np
+import torch
 
 from rlmeta_extension import FloatSumSegmentTree, DoubleSumSegmentTree
 from rlmeta_extension import FloatMinSegmentTree, DoubleMinSegmentTree
@@ -19,6 +18,7 @@ Value = Union[float, np.ndarray, torch.Tensor]
 
 
 class SegmentTree:
+
     def __init__(self,
                  impl: SegmentTreeImpl,
                  dtype: np.dtype = np.float32) -> None:
@@ -55,6 +55,7 @@ class SegmentTree:
 
 
 class SumSegmentTree(SegmentTree):
+
     def __init__(self, size: int, dtype: np.dtype = np.float32) -> None:
         if dtype == np.float32:
             impl = FloatSumSegmentTree(size)
@@ -69,6 +70,7 @@ class SumSegmentTree(SegmentTree):
 
 
 class MinSegmentTree(SegmentTree):
+
     def __init__(self, size: int, dtype: np.dtype = np.float32) -> None:
         if dtype == np.float32:
             impl = FloatMinSegmentTree(size)

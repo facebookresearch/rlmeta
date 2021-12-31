@@ -3,16 +3,17 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from typing import Tuple, Union
+
 import torch
 import torch.nn as nn
 
-from typing import Tuple, Union
-
 
 class RunningStats(nn.Module):
+
     def __init__(self, size: Union[int, Tuple[int]]) -> None:
         super().__init__()
-        self._size = (size, ) if isinstance(size, int) else size
+        self._size = (size,) if isinstance(size, int) else size
         self._m0 = 0
         self.register_buffer("_m1", torch.zeros(self._size))
         self.register_buffer("_m2", torch.zeros(self._size))

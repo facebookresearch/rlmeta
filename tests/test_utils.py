@@ -4,13 +4,15 @@
 # LICENSE file in the root directory of this source tree.
 
 import unittest
-import torch
+
 import numpy as np
+import torch
 
 import rlmeta.utils.data_utils as data_utils
 
 
 class TestCaseBase(unittest.TestCase):
+
     def assert_tensor_equal(self, x, y):
         self.assertTrue(isinstance(x, type(y)))
         x = data_utils.to_numpy(x)

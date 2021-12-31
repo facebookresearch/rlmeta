@@ -5,13 +5,13 @@
 
 import copy
 
+from typing import Tuple
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 import rlmeta.core.remote as remote
-
-from typing import Tuple
 
 from rlmeta.agents.dqn.dqn_model import DQNModel
 from rlmeta.core.rescaler import SqrtRescaler
@@ -19,6 +19,7 @@ from rlmeta.core.types import NestedTensor
 
 
 class AtariDQNNet(nn.Module):
+
     def __init__(self, action_dim: int, dueling_dqn: bool = True) -> None:
         super().__init__()
         self.action_dim = action_dim
@@ -50,6 +51,7 @@ class AtariDQNNet(nn.Module):
 
 
 class AtariDQNModel(DQNModel):
+
     def __init__(self,
                  action_dim: int,
                  double_dqn: bool = True,
@@ -62,8 +64,7 @@ class AtariDQNModel(DQNModel):
         self.reward_rescaling = reward_rescaling
 
         self.online_net = AtariDQNNet(self.action_dim)
-        self.target_net = copy.deepcopy(
-            self.online_net) if double_dqn else None
+        self.target_net = copy.deepcopy(self.online_net) if double_dqn else None
 
         if self.reward_rescaling:
             self.rescaler = SqrtRescaler()

@@ -4,15 +4,17 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
-import torch
-import torch.nn as nn
 
 from typing import Tuple, Union
+
+import torch
+import torch.nn as nn
 
 from rlmeta.utils.running_stats import RunningStats
 
 
 class Rescaler(nn.Module, abc.ABC):
+
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.rescale(x)
 
@@ -30,6 +32,7 @@ class Rescaler(nn.Module, abc.ABC):
 
 
 class NormRescaler(Rescaler):
+
     def __init__(self, size: Union[int, Tuple[int]]) -> None:
         super().__init__()
         self._size = size
@@ -44,8 +47,7 @@ class NormRescaler(Rescaler):
     def rescale(self, x: torch.Tensor, ddof=0) -> torch.Tensor:
         if self._running_stats.count() <= 1:
             return x
-        return (x -
-                self._running_stats.mean()) * self._running_stats.rstd(ddof)
+        return (x - self._running_stats.mean()) * self._running_stats.rstd(ddof)
 
     def recover(self, x: torch.Tensor, ddof: int = 0) -> torch.Tensor:
         if self._running_stats.count() <= 1:
@@ -54,6 +56,7 @@ class NormRescaler(Rescaler):
 
 
 class SqrtRescaler(Rescaler):
+
     def __init__(self, eps: float = 1e-3) -> None:
         super().__init__()
         self._eps = eps

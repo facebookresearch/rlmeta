@@ -7,20 +7,22 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import moolib
+
+from typing import Any, Callable, List, NoReturn, Optional, Sequence, Union
 
 import torch
 import torch.multiprocessing as mp
 
-import rlmeta.utils.asycio_utils as asycio_utils
+import moolib
 
-from typing import Any, Callable, List, NoReturn, Optional, Sequence, Union
+import rlmeta.utils.asycio_utils as asycio_utils
 
 from rlmeta.core.launchable import Launchable
 from rlmeta.core.remote import Remotable
 
 
 class Server(Launchable):
+
     def __init__(self, name: str, addr: str, timeout: float = 60) -> None:
         self._name = name
         self._addr = addr
@@ -127,6 +129,7 @@ class Server(Launchable):
 
 
 class ServerList:
+
     def __init__(self, servers: Optional[Sequence[Server]] = None) -> None:
         self._servers = []
         if servers is not None:

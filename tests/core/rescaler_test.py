@@ -13,6 +13,7 @@ from tests.test_utils import TestCaseBase
 
 
 class RescalerTest(TestCaseBase):
+
     def setUp(self) -> None:
         self.size = (4, 5)
         self.rtol = 1e-6

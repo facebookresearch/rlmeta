@@ -5,12 +5,11 @@
 
 import abc
 import copy
-import functools
+
+from typing import Any, Optional, Type
 
 import rlmeta.core.remote as remote
 import rlmeta.utils.moolib_utils as moolib_utils
-
-from typing import Any, Optional, Type
 
 from rlmeta.core.types import Action, TimeStep
 from rlmeta.core.types import NestedTensor
@@ -18,6 +17,7 @@ from rlmeta.utils.stats_dict import StatsDict
 
 
 class Agent(abc.ABC):
+
     @abc.abstractmethod
     def act(self, timestep: TimeStep) -> Action:
         """
@@ -69,6 +69,7 @@ class Agent(abc.ABC):
 
 
 class AgentFactory:
+
     def __init__(self, cls: Type[Agent], *args, **kwargs) -> None:
         self._cls = cls
         self._args = args

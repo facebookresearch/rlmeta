@@ -5,15 +5,16 @@
 
 import abc
 
+from typing import Tuple
+
 import torch
 import torch.nn as nn
-
-from typing import Tuple
 
 from rlmeta.core.model import RemotableModel
 
 
 class PPOModel(RemotableModel):
+
     @abc.abstractmethod
     def forward(self, obs: torch.Tensor, *args,
                 **kwargs) -> Tuple[torch.Tensor, torch.Tensor]:

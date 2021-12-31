@@ -7,6 +7,7 @@ import abc
 
 
 class Launchable(abc.ABC):
+
     @abc.abstractmethod
     def init_launching(self) -> None:
         """

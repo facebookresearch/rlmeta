@@ -12,6 +12,7 @@ from rlmeta.core.types import Action, TimeStep
 
 
 class Env(abc.ABC):
+
     @abc.abstractmethod
     def reset(self, *args, **kwargs) -> TimeStep:
         """
@@ -38,6 +39,7 @@ class Env(abc.ABC):
 
 
 class EnvFactory:
+
     def __init__(self, cls: Type[Env], *args, **kwargs) -> None:
         self._cls = cls
         self._args = args
