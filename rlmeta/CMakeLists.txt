@@ -22,7 +22,13 @@ execute_process(
 )
 list(APPEND CMAKE_PREFIX_PATH ${TORCH_PATH})
 find_package(Torch REQUIRED)
-set(TORCH_PYTHON_LIBRARIES "${TORCH_PATH}/lib/libtorch_python.so")
+if (MSVC)
+   set(TORCH_PYTHON_LIBRARIES "${TORCH_PATH}/lib/libtorch_python.dll")
+elseif(APPLE)
+   set(TORCH_PYTHON_LIBRARIES "${TORCH_PATH}/lib/libtorch_python.dylib")
+else()
+  set(TORCH_PYTHON_LIBRARIES "${TORCH_PATH}/lib/libtorch_python.so")
+endif()
 
 # pybind11
 add_subdirectory(
