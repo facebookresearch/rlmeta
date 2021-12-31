@@ -43,13 +43,13 @@ class AtariPPOModel(PPOModel):
 
     @remote.remote_method(batch_size=128)
     def act(
-        self, obs: torch.Tensor, deterministi_policy: torch.Tensor
+        self, obs: torch.Tensor, deterministic_policy: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         device = next(self.parameters()).device
 
         with torch.no_grad():
             x = obs.to(device)
-            d = deterministi_policy.to(device)
+            d = deterministic_policy.to(device)
             logpi, v = self.forward(x)
 
             greedy_action = logpi.argmax(-1, keepdim=True)
