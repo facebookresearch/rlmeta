@@ -7,15 +7,17 @@ from __future__ import annotations
 
 import abc
 import functools
-import moolib
 
-from typing import Any, Callable, List, Optional, Sequence
+from typing import Any, Callable, List, Optional
+
+import moolib
 
 from rlmeta.core.launchable import Launchable
 from rlmeta.utils.moolib_utils import generate_random_name
 
 
 class RemotableMeta(abc.ABCMeta):
+
     def __new__(cls, name, bases, attrs):
         remote_methods = set(attrs.get("__remote_methods__", []))
         for base in bases:
@@ -28,12 +30,14 @@ class RemotableMeta(abc.ABCMeta):
 
 
 class Remotable(abc.ABC, metaclass=RemotableMeta):
+
     @property
     def remote_methods(self) -> List[str]:
         return getattr(self, "__remote_methods__", [])
 
 
 class Remote:
+
     def __init__(self,
                  target: Remotable,
                  server_name: str,
@@ -113,6 +117,7 @@ class Remote:
 
 
 def remote_method(batch_size: Optional[int] = None) -> Callable[..., Any]:
+
     def remote_method_impl(func: Callable[..., Any]):
         setattr(func, "__remote__", True)
         setattr(func, "__batch_size__", batch_size)

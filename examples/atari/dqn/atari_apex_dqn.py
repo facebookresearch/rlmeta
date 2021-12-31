@@ -4,21 +4,19 @@
 # LICENSE file in the root directory of this source tree.
 
 import copy
-import hydra
-import json
 import logging
 import time
+
+import hydra
 
 import torch
 import torch.multiprocessing as mp
 
-import rlmeta.core.remote as remote
 import rlmeta.envs.atari_wrappers as atari_wrappers
 import rlmeta.envs.gym_wrappers as gym_wrappers
 import rlmeta.utils.remote_utils as remote_utils
 
 from examples.atari.dqn.atari_dqn_model import AtariDQNModel
-from rlmeta.agents.agent import AgentFactory
 from rlmeta.agents.dqn.apex_dqn_agent import ApeXDQNAgent, ApeXDQNAgentFactory
 from rlmeta.agents.dqn.apex_dqn_agent import ConstantEpsFunc, FlexibleEpsFunc
 from rlmeta.core.controller import Phase, Controller

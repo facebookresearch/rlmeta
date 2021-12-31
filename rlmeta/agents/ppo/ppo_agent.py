@@ -5,13 +5,13 @@
 
 import time
 
+from typing import Dict, List, Optional, Tuple
+
 import torch
 import torch.nn as nn
 
 import rlmeta_extension.nested_utils as nested_utils
 import rlmeta.utils.data_utils as data_utils
-
-from typing import Dict, List, Optional, Tuple
 
 from rlmeta.agents.agent import Agent
 from rlmeta.core.controller import Controller, ControllerLike, Phase
@@ -24,6 +24,7 @@ from rlmeta.utils.stats_dict import StatsDict
 
 
 class PPOAgent(Agent):
+
     def __init__(self,
                  model: ModelLike,
                  deterministic_policy: bool = False,
@@ -228,6 +229,6 @@ class PPOAgent(Agent):
             "grad_norm": grad_norm.detach().mean().item(),
         }
 
-    def model_forward(
-            self, batch: NestedTensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    def model_forward(self,
+                      batch: NestedTensor) -> Tuple[torch.Tensor, torch.Tensor]:
         return self.model(batch["obs"])

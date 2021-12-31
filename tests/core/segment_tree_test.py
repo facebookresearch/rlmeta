@@ -6,16 +6,17 @@
 import pickle
 import unittest
 
+from math import prod
+
 import numpy as np
 import torch
-
-from math import prod
 
 from rlmeta.core.segment_tree import SumSegmentTree, MinSegmentTree
 from tests.test_utils import TestCaseBase
 
 
 class SumSegmentTreeTest(TestCaseBase):
+
     def setUp(self) -> None:
         self.size = 100
         self.data = torch.randn(self.size)

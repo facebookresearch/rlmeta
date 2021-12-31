@@ -8,17 +8,18 @@ from __future__ import annotations
 import abc
 import asyncio
 import logging
-import moolib
 import time
+
+from typing import Dict, List, NoReturn, Optional, Sequence, Union
 
 import torch
 import torch.multiprocessing as mp
 
+import moolib
+
 import rlmeta.core.remote as remote
 import rlmeta.utils.asycio_utils as asycio_utils
 import rlmeta.utils.moolib_utils as moolib_utils
-
-from typing import Dict, List, NoReturn, Optional, Sequence, Union
 
 from rlmeta.agents.agent import Agent, AgentFactory
 from rlmeta.core.controller import Controller, ControllerLike, Phase
@@ -27,6 +28,7 @@ from rlmeta.envs.env import Env, EnvFactory
 
 
 class Loop(abc.ABC):
+
     @abc.abstractmethod
     def run(self, num_episodes: Optional[int] = None) -> None:
         """
@@ -34,6 +36,7 @@ class Loop(abc.ABC):
 
 
 class AsyncLoop(Loop, Launchable):
+
     def __init__(self,
                  env_factory: EnvFactory,
                  agent_factory: AgentFactory,
@@ -197,6 +200,7 @@ class AsyncLoop(Loop, Launchable):
 
 
 class ParallelLoop(Loop):
+
     def __init__(self,
                  env_factory: EnvFactory,
                  agent_factory: AgentFactory,
@@ -270,7 +274,7 @@ class ParallelLoop(Loop):
         processes = []
         for loop in self._async_loops:
             loop.init_launching()
-            process = mp.Process(target=self._run_async_loop, args=(loop, ))
+            process = mp.Process(target=self._run_async_loop, args=(loop,))
             processes.append(process)
         for process in processes:
             process.start()
@@ -301,6 +305,7 @@ class ParallelLoop(Loop):
 
 
 class LoopList:
+
     def __init__(self, loops: Optional[Sequence[Loop]] = None) -> None:
         self._loops = []
         if loops is not None:

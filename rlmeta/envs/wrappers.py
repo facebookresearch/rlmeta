@@ -3,9 +3,9 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import torch
-
 from typing import Optional
+
+import torch
 
 from rlmeta.core.types import Tensor, NestedTensor
 from rlmeta.core.types import Action, TimeStep
@@ -15,8 +15,9 @@ from rlmeta.envs.env import Env
 # Simiar as TimeLimit in OpenAI baselines.
 # https://github.com/openai/baselines/blob/master/baselines/common/wrappers.py
 class TimeLimitWrapper(Env):
+
     def __init__(self, env: Env, max_episode_steps: int) -> None:
-        super(TimeLimitWrapper, self).__init__()
+        super().__init__()
         self._env = env
         self._max_episode_steps = max_episode_steps
         self._elapsed_steps = 0

@@ -6,12 +6,12 @@
 import io
 import os
 
+from typing import Any, Dict, Sequence, Tuple, Union
+
 import numpy as np
 import torch
 
 import rlmeta_extension.nested_utils as nested_utils
-
-from typing import Any, Dict, Sequence, Tuple, Union
 
 from rlmeta.core.types import Tensor, NestedTensor
 
@@ -61,8 +61,8 @@ def size(data: Tensor) -> Sequence[int]:
 
 
 def to_numpy(data: Tensor) -> np.ndarray:
-    return data.detach().cpu().numpy() if isinstance(data, torch.Tensor) else \
-        data
+    return data.detach().cpu().numpy() if isinstance(data,
+                                                     torch.Tensor) else data
 
 
 def to_torch(data: Tensor) -> torch.Tensor:

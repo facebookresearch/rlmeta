@@ -7,11 +7,13 @@ from __future__ import annotations
 
 import math
 
-from tabulate import tabulate
 from typing import Dict, Optional
+
+from tabulate import tabulate
 
 
 class StatsItem:
+
     def __init__(self, key: Optional[str] = None) -> None:
         self._key = key
         self.reset()
@@ -58,6 +60,7 @@ class StatsItem:
 
 
 class StatsDict:
+
     def __init__(self) -> None:
         self._dict = {}
 

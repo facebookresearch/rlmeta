@@ -3,15 +3,14 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import gym
+from typing import Any, Callable, Optional
 
+import gym
 import numpy as np
 import torch
 
 import rlmeta.envs.atari_wrappers as atari_wrappers
 import rlmeta.utils.data_utils as data_utils
-
-from typing import Any, Callable, Optional
 
 from rlmeta.core.types import Tensor, NestedTensor
 from rlmeta.core.types import Action, TimeStep
@@ -23,8 +22,9 @@ class ImageObservationWrapper(gym.ObservationWrapper):
     """
     Wrap image observation from NHWC order to NCHW order.
     """
+
     def __init__(self, env: gym.Env) -> None:
-        super(ImageObservationWrapper, self).__init__(env)
+        super().__init__(env)
 
         shape = self.observation_space.shape
         dtype = self.observation_space.dtype
@@ -39,6 +39,7 @@ class ImageObservationWrapper(gym.ObservationWrapper):
 
 
 class GymWrapper(Env):
+
     def __init__(
             self,
             env: gym.Env,
@@ -95,6 +96,7 @@ class GymWrapper(Env):
 
 
 class AtariWrapperFactory(EnvFactory):
+
     def __init__(self,
                  env_id: str,
                  max_episode_steps: Optional[int] = None,

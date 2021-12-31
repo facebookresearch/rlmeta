@@ -5,15 +5,16 @@
 
 import abc
 
+from typing import Tuple
+
 import torch
 import torch.nn as nn
-
-from typing import Tuple
 
 from rlmeta.core.model import RemotableModel
 
 
 class PPOModel(RemotableModel):
+
     @abc.abstractmethod
     def forward(self, obs: torch.Tensor, *args,
                 **kwargs) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -40,7 +41,7 @@ class PPOModel(RemotableModel):
         Args:
             obs: A torch.Tensor for observation.
             deterministic_policy: A torch.Tensor for whether to use
-              deterministic_policy.
+            deterministic_policy.
 
         Returns:
             A tuple for pytorch tensor contains [action, logpi, v].

@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import copy
+from typing import Any, Dict, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -11,12 +11,11 @@ import torch.nn as nn
 import rlmeta.core.remote as remote
 import rlmeta_extension.nested_utils as nested_utils
 
-from typing import Any, Dict, Optional, Union
-
 from rlmeta.core.server import Server
 
 
 class RemotableModel(nn.Module, remote.Remotable):
+
     def init_launching(self) -> None:
         self.share_memory()
 
@@ -32,6 +31,7 @@ class RemotableModel(nn.Module, remote.Remotable):
 
 
 class DownstreamModel(remote.Remote):
+
     def __init__(self,
                  model: nn.Module,
                  server_name: str,

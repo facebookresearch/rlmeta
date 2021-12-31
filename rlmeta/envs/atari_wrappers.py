@@ -7,18 +7,22 @@
 # https://github.com/openai/baselines/blob/master/baselines/common/atari_wrappers.py
 # and slightly modified.
 
-import numpy as np
 import os
+
 from collections import deque
+
+import cv2
+import numpy as np
+
 import gym
 from gym import spaces
-import cv2
 
 cv2.ocl.setUseOpenCL(False)
 # from .wrappers import TimeLimit
 
 
 class NoopResetEnv(gym.Wrapper):
+
     def __init__(self, env, noop_max=30):
         """Sample initial states by taking random number of no-ops on reset.
         No-op is assumed to be action 0.
@@ -35,7 +39,7 @@ class NoopResetEnv(gym.Wrapper):
         if self.override_num_noops is not None:
             noops = self.override_num_noops
         else:
-            noops = self.unwrapped.np_random.randint(1, self.noop_max + 1)  #pylint: disable=E1101
+            noops = self.unwrapped.np_random.randint(1, self.noop_max + 1)
         assert noops > 0
         obs = None
         for _ in range(noops):
@@ -49,6 +53,7 @@ class NoopResetEnv(gym.Wrapper):
 
 
 class FireResetEnv(gym.Wrapper):
+
     def __init__(self, env):
         """Take action on reset for environments that are fixed until firing."""
         gym.Wrapper.__init__(self, env)
@@ -70,6 +75,7 @@ class FireResetEnv(gym.Wrapper):
 
 
 class EpisodicLifeEnv(gym.Wrapper):
+
     def __init__(self, env):
         """Make end-of-life == end-of-episode, but only reset on true game over.
         Done by DeepMind for the DQN and co. since it helps value estimation.
@@ -85,9 +91,9 @@ class EpisodicLifeEnv(gym.Wrapper):
         # then update lives to handle bonus lives
         lives = self.env.unwrapped.ale.lives()
         if lives < self.lives and lives > 0:
-            # for Qbert sometimes we stay in lives == 0 condition for a few frames
-            # so it's important to keep lives > 0, so that we only reset once
-            # the environment advertises done.
+            # for Qbert sometimes we stay in lives == 0 condition for a few
+            # frames so it's important to keep lives > 0, so that we only reset
+            # once the environment advertises done.
             done = True
         self.lives = lives
         return obs, reward, done, info
@@ -107,11 +113,12 @@ class EpisodicLifeEnv(gym.Wrapper):
 
 
 class MaxAndSkipEnv(gym.Wrapper):
+
     def __init__(self, env, skip=4):
         """Return only every `skip`-th frame"""
         gym.Wrapper.__init__(self, env)
         # most recent raw observations (for max pooling across time steps)
-        self._obs_buffer = np.zeros((2, ) + env.observation_space.shape,
+        self._obs_buffer = np.zeros((2,) + env.observation_space.shape,
                                     dtype=np.uint8)
         self._skip = skip
 
@@ -121,8 +128,10 @@ class MaxAndSkipEnv(gym.Wrapper):
         done = None
         for i in range(self._skip):
             obs, reward, done, info = self.env.step(action)
-            if i == self._skip - 2: self._obs_buffer[0] = obs
-            if i == self._skip - 1: self._obs_buffer[1] = obs
+            if i == self._skip - 2:
+                self._obs_buffer[0] = obs
+            if i == self._skip - 1:
+                self._obs_buffer[1] = obs
             total_reward += reward
             if done:
                 break
@@ -137,6 +146,7 @@ class MaxAndSkipEnv(gym.Wrapper):
 
 
 class ClipRewardEnv(gym.RewardWrapper):
+
     def __init__(self, env):
         gym.RewardWrapper.__init__(self, env)
 
@@ -146,6 +156,7 @@ class ClipRewardEnv(gym.RewardWrapper):
 
 
 class WarpFrame(gym.ObservationWrapper):
+
     def __init__(self,
                  env,
                  width=84,
@@ -155,8 +166,8 @@ class WarpFrame(gym.ObservationWrapper):
         """
         Warp frames to 84x84 as done in the Nature paper and later work.
 
-        If the environment uses dictionary observations, `dict_space_key` can be specified which indicates which
-        observation should be warped.
+        If the environment uses dictionary observations, `dict_space_key` can be
+        specified which indicates which observation should be warped.
         """
         super().__init__(env)
         self._width = width
@@ -205,6 +216,7 @@ class WarpFrame(gym.ObservationWrapper):
 
 
 class FrameStack(gym.Wrapper):
+
     def __init__(self, env, k):
         """Stack k last frames.
 
@@ -220,7 +232,7 @@ class FrameStack(gym.Wrapper):
         shp = env.observation_space.shape
         self.observation_space = spaces.Box(low=0,
                                             high=255,
-                                            shape=(shp[:-1] + (shp[-1] * k, )),
+                                            shape=(shp[:-1] + (shp[-1] * k,)),
                                             dtype=env.observation_space.dtype)
 
     def reset(self):
@@ -240,6 +252,7 @@ class FrameStack(gym.Wrapper):
 
 
 class ScaledFloatFrame(gym.ObservationWrapper):
+
     def __init__(self, env):
         gym.ObservationWrapper.__init__(self, env)
         self.observation_space = gym.spaces.Box(
@@ -252,12 +265,14 @@ class ScaledFloatFrame(gym.ObservationWrapper):
 
 
 class LazyFrames(object):
-    def __init__(self, frames):
-        """This object ensures that common frames between the observations are only stored once.
-        It exists purely to optimize memory usage which can be huge for DQN's 1M frames replay
-        buffers.
 
-        This object should only be converted to numpy array before being passed to the model.
+    def __init__(self, frames):
+        """This object ensures that common frames between the observations are
+        only stored once. It exists purely to optimize memory usage which can
+        be huge for DQN's 1M frames replay buffers.
+
+        This object should only be converted to numpy array before being passed
+        to the model.
 
         You'd not believe how complex the previous solution was."""
         self._frames = frames

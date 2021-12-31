@@ -3,18 +3,19 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from typing import Tuple
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 import rlmeta.core.remote as remote
 
-from typing import Tuple
-
 from rlmeta.agents.ppo.ppo_model import PPOModel
 
 
 class AtariPPOModel(PPOModel):
+
     def __init__(self, action_dim: int) -> None:
         super().__init__()
         self.action_dim = action_dim

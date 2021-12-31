@@ -4,14 +4,14 @@
 # LICENSE file in the root directory of this source tree.
 
 import copy
-import hydra
 import logging
 import time
+
+import hydra
 
 import torch
 import torch.multiprocessing as mp
 
-import rlmeta.core.remote as remote
 import rlmeta.envs.atari_wrappers as atari_wrappers
 import rlmeta.envs.gym_wrappers as gym_wrappers
 import rlmeta.utils.remote_utils as remote_utils

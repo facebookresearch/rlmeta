@@ -4,15 +4,15 @@
 # LICENSE file in the root directory of this source tree.
 
 import argparse
-import os
 import re
+
+from datetime import datetime
+from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
 
-from datetime import datetime
 from omegaconf import DictConfig, OmegaConf
-from typing import Optional
 
 TIME_FMT = "%Y-%m-%d %H:%M:%S"
 RE_PREFIX = "E Epoch [0-9]+ .+ "

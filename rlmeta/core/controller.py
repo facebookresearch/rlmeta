@@ -3,10 +3,10 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import rlmeta.core.remote as remote
-
 from enum import IntEnum
 from typing import Dict, Optional, Union
+
+import rlmeta.core.remote as remote
 
 from rlmeta.utils.stats_dict import StatsDict
 
@@ -18,6 +18,7 @@ class Phase(IntEnum):
 
 
 class Controller(remote.Remotable):
+
     def __init__(self) -> None:
         self._phase = Phase.NONE
         self._count = 0

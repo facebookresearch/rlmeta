@@ -3,16 +3,15 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import copy
 import time
+
+from typing import Callable, Dict, List, Optional
 
 import torch
 import torch.nn as nn
 
 import rlmeta.utils.data_utils as data_utils
 import rlmeta_extension.nested_utils as nested_utils
-
-from typing import Callable, Dict, List, Optional, Sequence, Union
 
 from rlmeta.agents.agent import Agent, AgentFactory
 from rlmeta.core.controller import Controller, ControllerLike, Phase
@@ -24,6 +23,7 @@ from rlmeta.utils.stats_dict import StatsDict
 
 
 class ApeXDQNAgent(Agent):
+
     def __init__(self,
                  model: ModelLike,
                  eps: float = 0.1,
@@ -190,6 +190,7 @@ class ApeXDQNAgent(Agent):
 
 
 class ApeXDQNAgentFactory(AgentFactory):
+
     def __init__(self,
                  model: ModelLike,
                  eps_func: Callable[[int], float],
@@ -226,6 +227,7 @@ class ApeXDQNAgentFactory(AgentFactory):
 
 
 class ConstantEpsFunc:
+
     def __init__(self, eps: float) -> None:
         self._eps = eps
 
@@ -234,6 +236,7 @@ class ConstantEpsFunc:
 
 
 class FlexibleEpsFunc:
+
     def __init__(self, eps: float, num: int, alpha: float = 7.0) -> None:
         self._eps = eps
         self._num = num
