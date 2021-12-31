@@ -41,7 +41,7 @@ class PPOModel(RemotableModel):
         Args:
             obs: A torch.Tensor for observation.
             deterministic_policy: A torch.Tensor for whether to use
-            deterministic_policy.
+              deterministic_policy.
 
         Returns:
             A tuple for pytorch tensor contains [action, logpi, v].
