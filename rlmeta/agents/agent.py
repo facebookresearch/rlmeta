@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import abc
+import asyncio
 import copy
 
 from typing import Any, Optional, Type
@@ -18,42 +19,54 @@ from rlmeta.utils.stats_dict import StatsDict
 
 class Agent(abc.ABC):
 
-    @abc.abstractmethod
     def act(self, timestep: TimeStep) -> Action:
         """
         Act function.
         """
-
-    async def async_act(self, timestep: TimeStep) -> Action:
-        return self.act(timestep)
+        return asyncio.run(self.async_act(timestep))
 
     @abc.abstractmethod
+    async def async_act(self, timestep: TimeStep) -> Action:
+        """
+        Async version of act function.
+        """
+
     def observe_init(self, timestep: TimeStep) -> None:
         """
-        Observe initial timestep from Env.
+        Observe function for initial timestep from Env.
         """
-
-    async def async_observe_init(self, timestep: TimeStep) -> None:
-        self.observe_init(timestep)
+        asyncio.run(self.async_observe_init(timestep))
 
     @abc.abstractmethod
+    async def async_observe_init(self, timestep: TimeStep) -> None:
+        """
+        Async version of observe function initial timestep from Env.
+        """
+
     def observe(self, action: Action, next_timestep: TimeStep) -> None:
         """
-        Observe action and next timestep.
+        Observe function for action and next timestep.
         """
-
-    async def async_observe(self, action: Action,
-                            next_timestep: TimeStep) -> None:
-        self.observe(action, next_timestep)
+        asyncio.run(self.async_observe(action, next_timestep))
 
     @abc.abstractmethod
+    async def async_observe(self, action: Action,
+                            next_timestep: TimeStep) -> None:
+        """
+        Async version of observe function for action and next timestep.
+        """
+
     def update(self) -> None:
         """
         Update function after each step.
         """
+        asyncio.run(self.async_update())
 
+    @abc.abstractmethod
     async def async_update(self) -> None:
-        self.update()
+        """
+        Async version of update function after each step.
+        """
 
     def connect(self) -> None:
         for obj_name in dir(self):
