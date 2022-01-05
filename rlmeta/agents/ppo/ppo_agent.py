@@ -79,14 +79,15 @@ class PPOAgent(Agent):
             obs, torch.tensor([self.deterministic_policy]))
         return Action(action, info={"logpi": logpi, "v": v})
 
-    def observe_init(self, timestep: TimeStep) -> None:
+    async def async_observe_init(self, timestep: TimeStep) -> None:
         obs, _, done, _ = timestep
         if done:
             self.trajectory = []
         else:
             self.trajectory = [{"obs": obs}]
 
-    def observe(self, action: Action, next_timestep: TimeStep) -> None:
+    async def async_observe(self, action: Action,
+                            next_timestep: TimeStep) -> None:
         act, info = action
         obs, reward, done, _ = next_timestep
 

@@ -12,8 +12,8 @@ import torch
 import rlmeta.envs.atari_wrappers as atari_wrappers
 import rlmeta.utils.data_utils as data_utils
 
-from rlmeta.core.types import Tensor, NestedTensor
 from rlmeta.core.types import Action, TimeStep
+from rlmeta.core.types import Tensor, NestedTensor
 from rlmeta.envs.env import Env, EnvFactory
 from rlmeta.envs.wrappers import TimeLimitWrapper
 

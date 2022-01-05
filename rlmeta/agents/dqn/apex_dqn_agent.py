@@ -66,11 +66,12 @@ class ApeXDQNAgent(Agent):
         action = await self.model.async_act(obs, torch.tensor([self.eps]))
         return Action(action, info=None)
 
-    def observe_init(self, timestep: TimeStep) -> None:
+    async def async_observe_init(self, timestep: TimeStep) -> None:
         obs, _, done, _ = timestep
         self.trajectory = [{"obs": obs, "done": done}]
 
-    def observe(self, action: Action, next_timestep: TimeStep) -> None:
+    async def async_observe(self, action: Action,
+                            next_timestep: TimeStep) -> None:
         act, _ = action
         obs, reward, done, _ = next_timestep
         cur = self.trajectory[-1]

@@ -7,8 +7,8 @@ import abc
 
 from typing import Optional, Type
 
-from rlmeta.core.types import NestedTensor
 from rlmeta.core.types import Action, TimeStep
+from rlmeta.core.types import NestedTensor
 
 
 class Env(abc.ABC):
