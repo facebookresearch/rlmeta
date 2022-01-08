@@ -120,7 +120,7 @@ class ApeXDQNAgent(Agent):
             stats.add_dict(time_stats)
 
             if step % self.sync_every_n_steps == self.sync_every_n_steps - 1:
-                self.model.double_dqn_sync()
+                self.model.sync_target_net()
 
             if step % self.push_every_n_steps == self.push_every_n_steps - 1:
                 self.model.push()

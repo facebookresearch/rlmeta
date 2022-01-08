@@ -55,6 +55,6 @@ class DQNModel(RemotableModel):
         """
 
     @abc.abstractmethod
-    def double_dqn_sync(self) -> None:
+    def sync_target_net(self) -> None:
         """
         """
