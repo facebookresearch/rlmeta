@@ -64,7 +64,7 @@ class AtariDQNModel(DQNModel):
         self.reward_rescaling = reward_rescaling
 
         self.online_net = AtariDQNNet(self.action_dim)
-        self.target_net = copy.deepcopy(self.online_net) if double_dqn else None
+        self.target_net = copy.deepcopy(self.online_net)
 
         if self.reward_rescaling:
             self.rescaler = SqrtRescaler()
@@ -104,12 +104,13 @@ class AtariDQNModel(DQNModel):
         q = q.gather(dim=-1, index=action)
 
         with torch.no_grad():
-            q_next = self.online_net(next_obs)
             if self.double_dqn:
+                q_next = self.online_net(next_obs)
                 a_next = q_next.argmax(-1, keepdim=True)
                 q_next = self.target_net(next_obs)
                 q_next = q_next.gather(dim=-1, index=a_next)
             else:
+                q_next = self.target_net(next_obs)
                 q_next = q_next.max(-1, keepdim=True)[0]
             if self.reward_rescaling:
                 q_next = self.rescaler.recover(q_next)
@@ -125,6 +126,5 @@ class AtariDQNModel(DQNModel):
         err = self.td_error(batch, gamma)
         return err.abs().cpu()
 
-    def double_dqn_sync(self) -> None:
-        if self.double_dqn:
-            self.target_net.load_state_dict(self.online_net.state_dict())
+    def sync_target_net(self) -> None:
+        self.target_net.load_state_dict(self.online_net.state_dict())
