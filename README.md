@@ -13,7 +13,7 @@ and then run the commands below.
 $ git clone https://github.com/facebookresearch/rlmeta
 $ cd rlmeta
 $ git submodule sync && git submodule update --init --recursive
-$ pip install -e .
+$ pip install -r requirements.txt .
 ```
 
 ## Run an Example
