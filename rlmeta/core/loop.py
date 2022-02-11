@@ -271,6 +271,10 @@ class ParallelLoop(Loop):
         return self._seed
 
     def run(self) -> NoReturn:
+        self.start()
+        self.join()
+
+    def start(self) -> None:
         processes = []
         for loop in self._async_loops:
             loop.init_launching()
@@ -279,9 +283,6 @@ class ParallelLoop(Loop):
         for process in processes:
             process.start()
         self._processes = processes
-
-    def start(self) -> None:
-        self.run()
 
     def join(self) -> None:
         for process in self._processes:
