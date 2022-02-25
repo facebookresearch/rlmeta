@@ -93,13 +93,15 @@ class Server(Launchable):
                 batch_size = getattr(method_impl, "__batch_size__", None)
                 self._add_server_task(method, method_impl, batch_size)
         try:
-            self._loop.run_forever()
+            if not self._loop.is_running():
+                self._loop.run_forever()
         except Exception as e:
             logging.error(e)
             raise
         finally:
             for task in self._tasks:
                 task.cancel()
+            self._loop.stop()
             self._loop.close()
 
     def _add_server_task(self, func_name: str, func_impl: Callable[..., Any],
