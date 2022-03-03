@@ -26,14 +26,24 @@ class RemotableMeta(abc.ABCMeta):
             if getattr(method, "__remote__", False):
                 remote_methods.add(method.__name__)
         attrs["__remote_methods__"] = list(remote_methods)
+        attrs["__identifier__"] = ""
         return super().__new__(cls, name, bases, attrs)
 
 
 class Remotable(abc.ABC, metaclass=RemotableMeta):
+    def __init__(self, identifier=""):
+        self.__identifier__ = identifier
 
     @property
     def remote_methods(self) -> List[str]:
         return getattr(self, "__remote_methods__", [])
+
+    @property
+    def identifier(self) -> str:
+        return self.__identifier__
+
+    def unique_name(self, name: str) -> str:
+        return self.identifier + "::" + name
 
 
 class Remote:
@@ -45,6 +55,7 @@ class Remote:
                  name: Optional[str] = None,
                  timeout: float = 60) -> None:
         self._remote_methods = target.remote_methods
+        self._identifier = target.identifier
         self._reset(server_name, server_addr, name, timeout)
         self._client_methods = {}
 
@@ -111,9 +122,9 @@ class Remote:
     def _bind(self) -> None:
         for method in self._remote_methods:
             self._client_methods[method] = functools.partial(
-                self.client.sync, self.server_name, method)
+                self.client.sync, self.server_name, self._identifier + "::" + method)
             self._client_methods["async_" + method] = functools.partial(
-                self.client.async_, self.server_name, method)
+                self.client.async_, self.server_name,  self._identifier + "::" + method)
 
 
 def remote_method(batch_size: Optional[int] = None) -> Callable[..., Any]:
