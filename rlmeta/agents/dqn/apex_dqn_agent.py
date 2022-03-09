@@ -34,6 +34,7 @@ class ApeXDQNAgent(Agent):
                  grad_clip: float = 50.0,
                  multi_step: int = 1,
                  gamma: float = 0.99,
+                 learning_starts: Optional[int] = None,
                  sync_every_n_steps: int = 10,
                  push_every_n_steps: int = 1) -> None:
         super().__init__()
@@ -50,6 +51,7 @@ class ApeXDQNAgent(Agent):
 
         self.multi_step = multi_step
         self.gamma = gamma
+        self.learning_starts = learning_starts
 
         self.sync_every_n_steps = sync_every_n_steps
         self.push_every_n_steps = push_every_n_steps
@@ -104,7 +106,7 @@ class ApeXDQNAgent(Agent):
     def train(self, num_steps: int) -> Optional[StatsDict]:
         self.controller.set_phase(Phase.TRAIN, reset=True)
 
-        self.replay_buffer.warm_up()
+        self.replay_buffer.warm_up(self.learning_starts)
         stats = StatsDict()
         for step in range(num_steps):
             t0 = time.perf_counter()
