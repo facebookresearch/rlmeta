@@ -66,6 +66,7 @@ def main(cfg):
                      controller=a_ctrl,
                      optimizer=optimizer,
                      batch_size=cfg.batch_size,
+                     learning_starts=cfg.get("learning_starts", None),
                      push_every_n_steps=cfg.push_every_n_steps)
     t_agent_fac = AgentFactory(PPOAgent, t_model, replay_buffer=t_rb)
     e_agent_fac = AgentFactory(PPOAgent, e_model, deterministic_policy=False)

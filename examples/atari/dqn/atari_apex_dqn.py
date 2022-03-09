@@ -71,6 +71,7 @@ def main(cfg):
                          optimizer=optimizer,
                          batch_size=cfg.batch_size,
                          multi_step=cfg.multi_step,
+                         learning_starts=cfg.get("learning_starts", None),
                          sync_every_n_steps=cfg.sync_every_n_steps,
                          push_every_n_steps=cfg.push_every_n_steps)
     t_agent_fac = ApeXDQNAgentFactory(t_model,
