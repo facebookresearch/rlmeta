@@ -103,17 +103,6 @@ class AsyncLoop(Loop, Launchable):
         pass
 
     def init_execution(self) -> None:
-        for obj_name in dir(self):
-            obj = getattr(self, obj_name)
-            if isinstance(obj, remote.Remote):
-                obj.name = moolib_utils.expend_name_by_index(
-                    obj.name, self.index)
-                obj.connect()
-        for obj_name in dir(self):
-            obj = getattr(self, obj_name)
-            if isinstance(obj, Launchable):
-                obj.init_execution()
-
         for i in range(self._num_rollouts):
             env = self._env_factory(self.index_offset + i)
             if self.seed is not None:
@@ -126,6 +115,17 @@ class AsyncLoop(Loop, Launchable):
             # if self.seed is not None:
             #     agent.seed(self.seed + self.index_offset + i)
             self._agents.append(agent)
+
+        for obj_name in dir(self):
+            obj = getattr(self, obj_name)
+            if isinstance(obj, remote.Remote):
+                obj.name = moolib_utils.expend_name_by_index(
+                    obj.name, self.index)
+                obj.connect()
+        for obj_name in dir(self):
+            obj = getattr(self, obj_name)
+            if isinstance(obj, Launchable):
+                obj.init_execution()
 
     def run(self) -> NoReturn:
         self._loop = asyncio.get_event_loop()
