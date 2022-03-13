@@ -59,23 +59,18 @@ async def run_batch(adder_client, send_tensor=False):
 
 
 def main():
-    adder1 = Adder('adder1')
-    adder2 = Adder('adder2')
+    adder = Adder()
     adder_server = Server(name="adder_server", addr="127.0.0.1:4411")
-    adder_server.add_service([adder1, adder2])
+    adder_server.add_service(adder)
 
-    adder_client = remote_utils.make_remote(adder1, adder_server)
-    adder_client2 = remote_utils.make_remote(adder2, adder_server)
+    adder_client = remote_utils.make_remote(adder, adder_server)
 
     adder_server.start()
     adder_client.connect()
-    adder_client2.connect()
 
     a = 1
     b = 2
     c = adder_client.add(a, b)
-    print(f"{a} + {b} = {c}")
-    c = adder_client2.add(a, b)
     print(f"{a} + {b} = {c}")
     print("")
     asyncio.run(run_batch(adder_client, send_tensor=False))

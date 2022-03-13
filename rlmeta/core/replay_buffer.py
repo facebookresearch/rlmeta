@@ -28,12 +28,14 @@ class ReplayBuffer(remote.Remotable, Launchable):
     def __init__(self,
                  capacity: int,
                  collate_fn: Optional[Callable[[Sequence[NestedTensor]],
-                                               NestedTensor]] = None):
+                                               NestedTensor]] = None,
+                 identifier: str = ""):
         self._buffer = CircularBuffer(capacity)
         if collate_fn is not None:
             self._collate_fn = collate_fn
         else:
             self._collate_fn = data_utils.stack_tensors
+        remote.Remotable.__init__(self, identifier)
 
     def __len__(self) -> int:
         return self.size
@@ -99,8 +101,9 @@ class PrioritizedReplayBuffer(ReplayBuffer):
                  eps: float = 1e-8,
                  collate_fn: Optional[Callable[[Sequence[NestedTensor]],
                                                NestedTensor]] = None,
-                 priority_type: np.dtype = np.float32) -> None:
-        super().__init__(capacity, collate_fn)
+                 priority_type: np.dtype = np.float32,
+                 identifier: str = "") -> None:
+        super().__init__(capacity, collate_fn, identifier=identifier)
 
         assert alpha > 0
         assert beta >= 0

@@ -16,6 +16,9 @@ from rlmeta.core.server import Server
 
 class RemotableModel(nn.Module, remote.Remotable):
 
+    def __init(self, identifier: str = ""):
+        remote.Remotable.__init__(self, identifier)
+
     def init_launching(self) -> None:
         self.share_memory()
 

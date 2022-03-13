@@ -19,11 +19,12 @@ class Phase(IntEnum):
 
 class Controller(remote.Remotable):
 
-    def __init__(self) -> None:
+    def __init__(self, identifier: str = "") -> None:
         self._phase = Phase.NONE
         self._count = 0
         self._limit = None
         self._stats = StatsDict()
+        super().__init__(identifier)
 
     @property
     def phase(self) -> Phase:

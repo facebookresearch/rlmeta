@@ -31,8 +31,9 @@ class RemotableMeta(abc.ABCMeta):
 
 
 class Remotable(abc.ABC, metaclass=RemotableMeta):
-    def __init__(self, identifier=""):
-        self.__identifier__ = identifier
+
+    def __init__(self, identifier: str = ""):
+        self._identifier = identifier
 
     @property
     def remote_methods(self) -> List[str]:
@@ -40,7 +41,7 @@ class Remotable(abc.ABC, metaclass=RemotableMeta):
 
     @property
     def identifier(self) -> str:
-        return self.__identifier__
+        return self._identifier
 
     def unique_name(self, name: str) -> str:
         return self.identifier + "::" + name
@@ -122,9 +123,11 @@ class Remote:
     def _bind(self) -> None:
         for method in self._remote_methods:
             self._client_methods[method] = functools.partial(
-                self.client.sync, self.server_name, self._identifier + "::" + method)
+                self.client.sync, self.server_name,
+                self._identifier + "::" + method)
             self._client_methods["async_" + method] = functools.partial(
-                self.client.async_, self.server_name,  self._identifier + "::" + method)
+                self.client.async_, self.server_name,
+                self._identifier + "::" + method)
 
 
 def remote_method(batch_size: Optional[int] = None) -> Callable[..., Any]:
