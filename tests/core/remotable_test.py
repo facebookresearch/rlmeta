@@ -22,32 +22,34 @@ class RemotableAdder(remote.Remotable):
 
 class ReplayBufferTest(unittest.TestCase):
 
-    def setUp(self):
-        self.server = Server(name="adder_server", addr="127.0.0.1:4411")
-
-    def tearDown(self) -> None:
-        self.server.terminate()
-
-    def test_add(self):
-        adder = RemotableAdder()
-        self.server.add_service(adder)
-        adder_client = remote_utils.make_remote(adder, self.server)
-        self.server.start()
-        adder_client.connect()
-        c = adder_client.add(1, 1)
-        self.assertEqual(c, 2)
+    # def test_add(self):
+    #     server = Server(name="adder_server", addr="127.0.0.1:4411")
+    #     adder = RemotableAdder()
+    #     server.add_service(adder)
+    #     adder_client = remote_utils.make_remote(adder, server)
+    #     server.start()
+    #     adder_client.connect()
+    #     c = adder_client.add(1, 1)
+    #     self.assertEqual(c, 2)
+    #     server.terminate()
 
     def test_add_multiple(self):
-        adder1 = RemotableAdder('1')
-        adder2 = RemotableAdder('2')
-        self.server.add_service([adder1, adder2])
-        adder_client1 = remote_utils.make_remote(adder1, self.server)
-        adder_client2 = remote_utils.make_remote(adder2, self.server)
-        self.server.start()
+        server = Server(name="adder_server", addr="127.0.0.1:4412")
+        adder1 = RemotableAdder('a')
+        adder2 = RemotableAdder('b')
+        self.assertEqual(adder1.identifier, 'a')
+        self.assertEqual(adder2.identifier, 'b')
+        server.add_service([adder1, adder2])
+        adder_client1 = remote_utils.make_remote(adder1, server)
+        adder_client2 = remote_utils.make_remote(adder2, server)
+        server.start()
         adder_client1.connect()
-        self.assertEqual(adder_client1.add(1, 1), 2)
+        c = adder_client1.add(1, 1)
+        self.assertEqual(c, 2)
         adder_client2.connect()
-        self.assertEqual(adder_client2.add(1, 1), 2)
+        c = adder_client2.add(1, 1)
+        self.assertEqual(c, 2)
+        server.terminate()
 
 if __name__ == "__main__":
     unittest.main()

@@ -91,7 +91,8 @@ class Server(Launchable):
             for method in service.remote_methods:
                 method_impl = getattr(service, method)
                 batch_size = getattr(method_impl, "__batch_size__", None)
-                self._add_server_task(service.unique_name(method), method_impl, batch_size)
+                self._add_server_task(service.unique_name(method), method_impl,
+                                      batch_size)
         try:
             if not self._loop.is_running():
                 self._loop.run_forever()

@@ -26,7 +26,6 @@ class RemotableMeta(abc.ABCMeta):
             if getattr(method, "__remote__", False):
                 remote_methods.add(method.__name__)
         attrs["__remote_methods__"] = list(remote_methods)
-        attrs["__identifier__"] = ""
         return super().__new__(cls, name, bases, attrs)
 
 
