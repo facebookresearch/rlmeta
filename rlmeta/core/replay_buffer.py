@@ -168,11 +168,14 @@ class PrioritizedReplayBuffer(ReplayBuffer):
                         priority: Union[float, Tensor]) -> None:
         self._update_priority(index, priority)
 
-    def warm_up(self):
+    def warm_up(self, learning_starts: Optional[int] = None) -> None:
         capacity = self.get_capacity()
+        target_size = capacity
+        if learning_starts is not None:
+            target_size = min(target_size, learning_starts)
         width = len(str(capacity)) + 1
         cur_size = self.get_size()
-        while cur_size < capacity:
+        while cur_size < target_size:
             time.sleep(1)
             cur_size = self.get_size()
             logging.info("Warming up replay buffer: " +
@@ -294,11 +297,14 @@ class RemoteReplayBuffer(remote.Remote):
 
         return ret
 
-    def warm_up(self):
+    def warm_up(self, learning_starts: Optional[int] = None) -> None:
         capacity = self.get_capacity()
+        target_size = capacity
+        if learning_starts is not None:
+            target_size = min(target_size, learning_starts)
         width = len(str(capacity)) + 1
         cur_size = self.get_size()
-        while cur_size < capacity:
+        while cur_size < target_size:
             time.sleep(1)
             cur_size = self.get_size()
             logging.info("Warming up replay buffer: " +

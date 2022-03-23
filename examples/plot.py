@@ -15,7 +15,7 @@ import numpy as np
 from omegaconf import DictConfig, OmegaConf
 
 TIME_FMT = "%Y-%m-%d %H:%M:%S"
-RE_PREFIX = "E Epoch [0-9]+ .+ "
+RE_PREFIX = "E Epoch [0-9]+ .* "
 
 
 def parse_config(line: str) -> DictConfig:

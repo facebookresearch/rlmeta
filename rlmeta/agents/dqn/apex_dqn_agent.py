@@ -5,7 +5,7 @@
 
 import time
 
-from typing import Callable, Dict, List, Optional
+from typing import Callable, Dict, List, Optional, Sequence
 
 import torch
 import torch.nn as nn
@@ -24,18 +24,23 @@ from rlmeta.utils.stats_dict import StatsDict
 
 class ApeXDQNAgent(Agent):
 
-    def __init__(self,
-                 model: ModelLike,
-                 eps: float = 0.1,
-                 replay_buffer: Optional[ReplayBufferLike] = None,
-                 controller: Optional[ControllerLike] = None,
-                 optimizer: Optional[torch.optim.Optimizer] = None,
-                 batch_size: int = 128,
-                 grad_clip: float = 50.0,
-                 multi_step: int = 1,
-                 gamma: float = 0.99,
-                 sync_every_n_steps: int = 10,
-                 push_every_n_steps: int = 1) -> None:
+    def __init__(
+        self,
+        model: ModelLike,
+        eps: float = 0.1,
+        replay_buffer: Optional[ReplayBufferLike] = None,
+        controller: Optional[ControllerLike] = None,
+        optimizer: Optional[torch.optim.Optimizer] = None,
+        batch_size: int = 128,
+        grad_clip: float = 50.0,
+        multi_step: int = 1,
+        gamma: float = 0.99,
+        learning_starts: Optional[int] = None,
+        sync_every_n_steps: int = 10,
+        push_every_n_steps: int = 1,
+        collate_fn: Optional[Callable[[Sequence[NestedTensor]],
+                                      NestedTensor]] = None
+    ) -> None:
         super().__init__()
 
         self.model = model
@@ -50,9 +55,15 @@ class ApeXDQNAgent(Agent):
 
         self.multi_step = multi_step
         self.gamma = gamma
+        self.learning_starts = learning_starts
 
         self.sync_every_n_steps = sync_every_n_steps
         self.push_every_n_steps = push_every_n_steps
+
+        if collate_fn is not None:
+            self.collate_fn = collate_fn
+        else:
+            self.collate_fn = data_utils.stack_tensors
 
         self.trajectory = []
 
@@ -84,7 +95,7 @@ class ApeXDQNAgent(Agent):
             return
         if self.replay_buffer is not None:
             replay = self.make_replay()
-            batch = data_utils.stack_fields(replay)
+            batch = nested_utils.collate_nested(self.collate_fn, replay)
             priority = self.model.compute_priority(
                 batch, torch.tensor([self.gamma**self.multi_step]))
             self.replay_buffer.extend(replay, priority)
@@ -95,7 +106,7 @@ class ApeXDQNAgent(Agent):
             return
         if self.replay_buffer is not None:
             replay = self.make_replay()
-            batch = data_utils.stack_fields(replay)
+            batch = nested_utils.collate_nested(self.collate_fn, replay)
             priority = await self.model.async_compute_priority(
                 batch, torch.tensor([self.gamma**self.multi_step]))
             await self.replay_buffer.async_extend(replay, priority)
@@ -104,7 +115,7 @@ class ApeXDQNAgent(Agent):
     def train(self, num_steps: int) -> Optional[StatsDict]:
         self.controller.set_phase(Phase.TRAIN, reset=True)
 
-        self.replay_buffer.warm_up()
+        self.replay_buffer.warm_up(self.learning_starts)
         stats = StatsDict()
         for step in range(num_steps):
             t0 = time.perf_counter()
@@ -192,18 +203,23 @@ class ApeXDQNAgent(Agent):
 
 class ApeXDQNAgentFactory(AgentFactory):
 
-    def __init__(self,
-                 model: ModelLike,
-                 eps_func: Callable[[int], float],
-                 replay_buffer: Optional[ReplayBufferLike] = None,
-                 controller: Optional[ControllerLike] = None,
-                 optimizer: Optional[torch.optim.Optimizer] = None,
-                 batch_size: int = 128,
-                 grad_clip: float = 50.0,
-                 multi_step: int = 1,
-                 gamma: float = 0.99,
-                 sync_every_n_steps: int = 10,
-                 push_every_n_steps: int = 1) -> None:
+    def __init__(
+        self,
+        model: ModelLike,
+        eps_func: Callable[[int], float],
+        replay_buffer: Optional[ReplayBufferLike] = None,
+        controller: Optional[ControllerLike] = None,
+        optimizer: Optional[torch.optim.Optimizer] = None,
+        batch_size: int = 128,
+        grad_clip: float = 50.0,
+        multi_step: int = 1,
+        gamma: float = 0.99,
+        learning_starts: Optional[int] = None,
+        sync_every_n_steps: int = 10,
+        push_every_n_steps: int = 1,
+        collate_fn: Optional[Callable[[Sequence[NestedTensor]],
+                                      NestedTensor]] = None
+    ) -> None:
         self._model = model
         self._eps_func = eps_func
         self._replay_buffer = replay_buffer
@@ -213,8 +229,10 @@ class ApeXDQNAgentFactory(AgentFactory):
         self._grad_clip = grad_clip
         self._multi_step = multi_step
         self._gamma = gamma
+        self._learning_starts = learning_starts
         self._sync_every_n_steps = sync_every_n_steps
         self._push_every_n_steps = push_every_n_steps
+        self._collate_fn = collate_fn
 
     def __call__(self, index: int):
         model = self._make_arg(self._model, index)
@@ -224,7 +242,8 @@ class ApeXDQNAgentFactory(AgentFactory):
         return ApeXDQNAgent(model, eps, replay_buffer, controller,
                             self._optimizer, self._batch_size, self._grad_clip,
                             self._multi_step, self._gamma,
-                            self._sync_every_n_steps, self._push_every_n_steps)
+                            self._learning_starts, self._sync_every_n_steps,
+                            self._push_every_n_steps, self._collate_fn)
 
 
 class ConstantEpsFunc:

@@ -22,14 +22,16 @@ num_eval_workers: 4
 train_eps: 0.4
 eval_eps: 0.01
 
-replay_buffer_size: 131072
+replay_buffer_size: 262144
 alpha: 0.6
 beta: 0.4
-prefetch: 1
+prefetch: 2
 
 batch_size: 512
 lr: 3e-4
 multi_step: 3
+learning_starts: 65536
+
 sync_every_n_steps: 100
 push_every_n_steps: 10
 

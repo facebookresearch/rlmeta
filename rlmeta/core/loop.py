@@ -103,17 +103,6 @@ class AsyncLoop(Loop, Launchable):
         pass
 
     def init_execution(self) -> None:
-        for obj_name in dir(self):
-            obj = getattr(self, obj_name)
-            if isinstance(obj, remote.Remote):
-                obj.name = moolib_utils.expend_name_by_index(
-                    obj.name, self.index)
-                obj.connect()
-        for obj_name in dir(self):
-            obj = getattr(self, obj_name)
-            if isinstance(obj, Launchable):
-                obj.init_execution()
-
         for i in range(self._num_rollouts):
             env = self._env_factory(self.index_offset + i)
             if self.seed is not None:
@@ -126,6 +115,17 @@ class AsyncLoop(Loop, Launchable):
             # if self.seed is not None:
             #     agent.seed(self.seed + self.index_offset + i)
             self._agents.append(agent)
+
+        for obj_name in dir(self):
+            obj = getattr(self, obj_name)
+            if isinstance(obj, remote.Remote):
+                obj.name = moolib_utils.expend_name_by_index(
+                    obj.name, self.index)
+                obj.connect()
+        for obj_name in dir(self):
+            obj = getattr(self, obj_name)
+            if isinstance(obj, Launchable):
+                obj.init_execution()
 
     def run(self) -> NoReturn:
         self._loop = asyncio.get_event_loop()
@@ -148,7 +148,7 @@ class AsyncLoop(Loop, Launchable):
     async def _check_phase(self) -> NoReturn:
         while True:
             cur_phase = await self._controller.async_get_phase()
-            self._running = (cur_phase == self.running_phase)
+            self._running = (cur_phase == self._running_phase)
             await asyncio.sleep(1)
 
     async def _run_loop(self,
@@ -160,7 +160,8 @@ class AsyncLoop(Loop, Launchable):
                 await asyncio.sleep(1)
             stats = await self._run_episode(env, agent, index)
             if stats is not None:
-                await self._controller.async_add_episode(stats)
+                await self._controller.async_add_episode(
+                    self._running_phase, stats)
 
     # Similar loop as DeepMind's Acme
     # https://github.com/deepmind/acme/blob/master/acme/environment_loop.py#L68
@@ -236,7 +237,7 @@ class ParallelLoop(Loop):
         index_offset = self._index_offset
         for i, workload in enumerate(self._workloads):
             loop = AsyncLoop(self._env_factory, self._agent_factory,
-                             self._controller, self.running_phase,
+                             self._controller, self._running_phase,
                              self.should_update, workload, i, index_offset,
                              self.seed)
             self._async_loops.append(loop)

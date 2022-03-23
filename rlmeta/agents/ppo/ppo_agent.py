@@ -40,6 +40,7 @@ class PPOAgent(Agent):
                  advantage_normalization: bool = True,
                  reward_rescaling: bool = True,
                  value_clip: bool = True,
+                 learning_starts: Optional[int] = None,
                  push_every_n_steps: int = 1) -> None:
         super(PPOAgent, self).__init__()
 
@@ -63,6 +64,7 @@ class PPOAgent(Agent):
             self.reward_rescaler = NormRescaler(size=1)
         self.value_clip = value_clip
 
+        self.learning_starts = learning_starts
         self.push_every_n_steps = push_every_n_steps
         self.done = False
         self.trajectory = []
@@ -120,7 +122,7 @@ class PPOAgent(Agent):
     def train(self, num_steps: int) -> Optional[StatsDict]:
         self.controller.set_phase(Phase.TRAIN, reset=True)
 
-        self.replay_buffer.warm_up()
+        self.replay_buffer.warm_up(self.learning_starts)
         stats = StatsDict()
         for step in range(num_steps):
             t0 = time.perf_counter()

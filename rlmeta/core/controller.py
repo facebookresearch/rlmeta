@@ -66,8 +66,9 @@ class Controller(remote.Remotable):
         return self.stats
 
     @remote.remote_method(batch_size=None)
-    def add_episode(self, stats: Dict[str, float]) -> None:
-        if self._limit is None or self._count < self._limit:
+    def add_episode(self, phase: Phase, stats: Dict[str, float]) -> None:
+        if phase == self._phase and (self._limit is None or
+                                     self._count < self._limit):
             self._count += 1
             self._stats.add_dict(stats)
 
