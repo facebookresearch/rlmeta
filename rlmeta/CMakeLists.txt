@@ -23,11 +23,23 @@ execute_process(
 list(APPEND CMAKE_PREFIX_PATH ${TORCH_PATH})
 find_package(Torch REQUIRED)
 if (MSVC)
-  set(TORCH_PYTHON_LIBRARIES "${TORCH_PATH}/lib/libtorch_python.dll")
+  set(
+    TORCH_PYTHON_LIBRARIES
+    "${TORCH_PATH}/lib/libtorch.dll"
+    "${TORCH_PATH}/lib/libtorch_python.dll"
+  )
 elseif(APPLE)
-  set(TORCH_PYTHON_LIBRARIES "${TORCH_PATH}/lib/libtorch_python.dylib")
+  set(
+    TORCH_PYTHON_LIBRARIES
+    "${TORCH_PATH}/lib/libtorch.dylib"
+    "${TORCH_PATH}/lib/libtorch_python.dylib"
+  )
 else()
-  set(TORCH_PYTHON_LIBRARIES "${TORCH_PATH}/lib/libtorch_python.so")
+  set(
+    TORCH_PYTHON_LIBRARIES
+    "${TORCH_PATH}/lib/libtorch.so"
+    "${TORCH_PATH}/lib/libtorch_python.so"
+  )
 endif()
 
 # pybind11
