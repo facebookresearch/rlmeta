@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import json
 import math
 
 from typing import Dict, Optional
@@ -14,9 +15,13 @@ from tabulate import tabulate
 
 class StatsItem:
 
-    def __init__(self, key: Optional[str] = None) -> None:
+    def __init__(self,
+                 key: Optional[str] = None,
+                 val: Optional[float] = None) -> None:
         self._key = key
         self.reset()
+        if val is not None:
+            self.add(val)
 
     @property
     def key(self) -> str:
@@ -47,7 +52,7 @@ class StatsItem:
         return self._m1
 
     def var(self, ddof: int = 0) -> float:
-        return self._m2 / (self._m0 - ddof) if self._m0 > 1 else float("nan")
+        return self._m2 / (self._m0 - ddof)
 
     def std(self, ddof: int = 0) -> float:
         return math.sqrt(self.var(ddof))
@@ -57,6 +62,18 @@ class StatsItem:
 
     def max(self) -> float:
         return self._max_val
+
+    def dict(self) -> Dict[str, float]:
+        ret = {
+            "mean": self.mean(),
+            "std": self.std(),
+            "min": self.min(),
+            "max": self.max(),
+            "count": self.count(),
+        }
+        if self.key is not None:
+            ret["key"] = self.key
+        return ret
 
 
 class StatsDict:
@@ -74,27 +91,47 @@ class StatsDict:
         if k in self._dict:
             self._dict[k].add(v)
         else:
-            item = StatsItem(k)
-            item.add(v)
-            self._dict[k] = item
+            self._dict[k] = StatsItem(k, v)
 
-    def add_dict(self, d: Dict[str, float]) -> None:
+    def extend(self, d: Dict[str, float]) -> None:
         for k, v in d.items():
             self.add(k, v)
 
     def update(self, stats: StatsDict) -> None:
         self._dict.update(stats._dict)
 
-    def table(self, info: Optional[str] = None) -> str:
-        h = ["info"] if info is not None else []
-        h += ["key", "mean", "std", "min", "max", "count"]
-        t = []
+    def dict(self) -> Dict[str, float]:
+        return {k: v.dict() for k, v in self._dict.items()}
+
+    def json(self, info: Optional[str] = None, **kwargs) -> str:
+        data = self.dict()
+        if info is not None:
+            data["info"] = info
+        data.update(kwargs)
+        return json.dumps(data)
+
+    def table(self, info: Optional[str] = None, **kwargs) -> str:
+        if info is None:
+            head = ["key", "mean", "std", "min", "max", "count"]
+        else:
+            head = ["info", "key", "mean", "std", "min", "max", "count"]
+
+        data = []
         for k, v in self._dict.items():
-            row = [info] if info is not None else []
-            row += [k, v.mean(), v.std(), v.min(), v.max(), v.count()]
-            t.append(row)
-        return tabulate(t,
-                        h,
+            if info is None:
+                row = [k, v.mean(), v.std(), v.min(), v.max(), v.count()]
+            else:
+                row = [info, k, v.mean(), v.std(), v.min(), v.max(), v.count()]
+            data.append(row)
+        for k, v in kwargs.items():
+            if info is None:
+                row = [k, v, 0.0, v, v, 1]
+            else:
+                row = [info, k, v, 0.0, v, v, 1]
+            data.append(row)
+
+        return tabulate(data,
+                        head,
                         numalign="right",
                         stralign="right",
                         floatfmt=".8f")

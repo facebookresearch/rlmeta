@@ -134,8 +134,8 @@ class PPOAgent(Agent):
                 "sample_data_time/ms": (t1 - t0) * 1000.0,
                 "batch_learn_time/ms": (t2 - t1) * 1000.0,
             }
-            stats.add_dict(step_stats)
-            stats.add_dict(time_stats)
+            stats.extend(step_stats)
+            stats.extend(time_stats)
 
             if step % self.push_every_n_steps == self.push_every_n_steps - 1:
                 self.model.push()

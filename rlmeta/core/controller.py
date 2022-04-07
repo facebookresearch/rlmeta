@@ -69,7 +69,7 @@ class Controller(remote.Remotable):
         if phase == self._phase and (self._limit is None or
                                      self._count < self._limit):
             self._count += 1
-            self._stats.add_dict(stats)
+            self._stats.extend(stats)
 
 
 ControllerLike = Union[Controller, remote.Remote]
