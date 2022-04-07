@@ -14,6 +14,7 @@ import torch.multiprocessing as mp
 
 import rlmeta.envs.atari_wrappers as atari_wrappers
 import rlmeta.envs.gym_wrappers as gym_wrappers
+import rlmeta.utils.hydra_utils as hydra_utils
 import rlmeta.utils.remote_utils as remote_utils
 
 from examples.atari.dqn.atari_dqn_model import AtariDQNModel
@@ -29,7 +30,7 @@ from rlmeta.core.server import Server, ServerList
 
 @hydra.main(config_path="./conf", config_name="conf_apex_dqn")
 def main(cfg):
-    logging.info(cfg)
+    logging.info(hydra_utils.config_to_json(cfg))
 
     env = atari_wrappers.make_atari(cfg.env)
     train_model = AtariDQNModel(env.action_space.n).to(cfg.train_device)
@@ -100,17 +101,30 @@ def main(cfg):
 
     servers.start()
     loops.start()
-
     agent.connect()
+
+    start_time = time.perf_counter()
     for epoch in range(cfg.num_epochs):
         stats = agent.train(cfg.steps_per_epoch)
+        cur_time = time.perf_counter() - start_time
         info = f"T Epoch {epoch}"
-        logging.info("\n\n" + stats.table(info) + "\n")
+        if cfg.table_view:
+            logging.info("\n\n" + stats.table(info, time=cur_time) + "\n")
+        else:
+            logging.info(
+                stats.json(info, phase="Train", epoch=epoch, time=cur_time))
         time.sleep(1)
+
         stats = agent.eval(cfg.num_eval_episodes)
+        cur_time = time.perf_counter() - start_time
         info = f"E Epoch {epoch}"
-        logging.info("\n\n" + stats.table(info) + "\n")
+        if cfg.table_view:
+            logging.info("\n\n" + stats.table(info, time=cur_time) + "\n")
+        else:
+            logging.info(
+                stats.json(info, phase="Eval", epoch=epoch, time=cur_time))
         time.sleep(1)
+
         torch.save(train_model.state_dict(), f"dqn_agent-{epoch}.pth")
 
     loops.terminate()

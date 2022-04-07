@@ -34,3 +34,5 @@ num_eval_episodes: 20
 
 train_seed: 123
 eval_seed: 456
+
+table_view: False
