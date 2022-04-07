@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import abc
 import asyncio
+import copy
 import logging
 import time
 
@@ -22,6 +23,7 @@ import rlmeta.utils.asycio_utils as asycio_utils
 import rlmeta.utils.moolib_utils as moolib_utils
 
 from rlmeta.agents.agent import Agent, AgentFactory
+from rlmeta.core.callbacks import EpisodeCallbacks
 from rlmeta.core.controller import Controller, ControllerLike, Phase
 from rlmeta.core.launchable import Launchable
 from rlmeta.envs.env import Env, EnvFactory
@@ -46,7 +48,8 @@ class AsyncLoop(Loop, Launchable):
                  num_rollouts: int = 1,
                  index: int = 0,
                  index_offset: Optional[int] = None,
-                 seed: Optional[int] = None) -> None:
+                 seed: Optional[int] = None,
+                 episode_callbacks: Optional[EpisodeCallbacks] = None) -> None:
         self._running_phase = running_phase
         self._should_update = should_update
         self._index = index
@@ -66,6 +69,8 @@ class AsyncLoop(Loop, Launchable):
         self._loop = None
         self._tasks = []
         self._running = False
+
+        self._episode_callbacks = episode_callbacks
 
     @property
     def running_phase(self) -> Phase:
@@ -132,8 +137,11 @@ class AsyncLoop(Loop, Launchable):
         self._tasks.append(
             asycio_utils.create_task(self._loop, self._check_phase()))
         for i, (env, agent) in enumerate(zip(self._envs, self._agents)):
+            index = self.index_offset + i
             task = asycio_utils.create_task(
-                self._loop, self._run_loop(env, agent, self.index_offset + i))
+                self._loop,
+                self._run_loop(index, env, agent,
+                               copy.deepcopy(self._episode_callbacks)))
             self._tasks.append(task)
         try:
             self._loop.run_forever()
@@ -151,31 +159,42 @@ class AsyncLoop(Loop, Launchable):
             self._running = (cur_phase == self._running_phase)
             await asyncio.sleep(1)
 
-    async def _run_loop(self,
-                        env: Env,
-                        agent: Agent,
-                        index: int = 0) -> NoReturn:
+    async def _run_loop(
+            self,
+            index: int,
+            env: Env,
+            agent: Agent,
+            episode_callbacks: Optional[EpisodeCallbacks] = None) -> NoReturn:
         while True:
             while not self.running:
                 await asyncio.sleep(1)
-            stats = await self._run_episode(env, agent, index)
+            stats = await self._run_episode(index, env, agent,
+                                            episode_callbacks)
             if stats is not None:
                 await self._controller.async_add_episode(
                     self._running_phase, stats)
 
     # Similar loop as DeepMind's Acme
     # https://github.com/deepmind/acme/blob/master/acme/environment_loop.py#L68
-    async def _run_episode(self,
-                           env: Env,
-                           agent: Agent,
-                           index: int = 0) -> Optional[Dict[str, float]]:
+    async def _run_episode(
+        self,
+        index: int,
+        env: Env,
+        agent: Agent,
+        episode_callbacks: Optional[EpisodeCallbacks] = None
+    ) -> Optional[Dict[str, float]]:
+
         episode_length = 0
         episode_return = 0.0
-
         start_time = time.perf_counter()
+        if episode_callbacks is not None:
+            episode_callbacks.reset()
+            episode_callbacks.on_episode_start(index)
 
         timestep = env.reset()
         await agent.async_observe_init(timestep)
+        if episode_callbacks is not None:
+            episode_callbacks.on_episode_init(index, timestep)
 
         while not timestep.done:
             if not self.running:
@@ -188,16 +207,25 @@ class AsyncLoop(Loop, Launchable):
 
             episode_length += 1
             episode_return += timestep.reward
+            if episode_callbacks is not None:
+                episode_callbacks.on_episode_step(index, episode_length - 1,
+                                                  action, timestep)
 
         episode_time = time.perf_counter() - start_time
         steps_per_second = episode_length / episode_time
+        if episode_callbacks is not None:
+            episode_callbacks.on_episode_end(index)
 
-        return {
+        metrics = {
             "episode_length": float(episode_length),
             "episode_return": episode_return,
             "episode_time/s": episode_time,
             "steps_per_second": steps_per_second,
         }
+        if episode_callbacks is not None:
+            metrics.update(episode_callbacks.custom_metrics)
+
+        return metrics
 
 
 class ParallelLoop(Loop):
@@ -212,7 +240,8 @@ class ParallelLoop(Loop):
                  num_workers: Optional[int] = None,
                  index: int = 0,
                  index_offset: Optional[int] = None,
-                 seed: Optional[int] = None) -> None:
+                 seed: Optional[int] = None,
+                 episode_callbacks: Optional[EpisodeCallbacks] = None) -> None:
         self._running_phase = running_phase
         self._should_update = should_update
         self._index = index
@@ -224,11 +253,12 @@ class ParallelLoop(Loop):
             self._index_offset = index * num_rollouts
         else:
             self._index_offset = index_offset
-        self._seed = seed
 
         self._env_factory = env_factory
         self._agent_factory = agent_factory
         self._controller = controller
+        self._seed = seed
+        self._episode_callbacks = episode_callbacks
 
         self._workloads = self._compute_workloads()
         self._async_loops = []
@@ -238,8 +268,8 @@ class ParallelLoop(Loop):
         for i, workload in enumerate(self._workloads):
             loop = AsyncLoop(self._env_factory, self._agent_factory,
                              self._controller, self._running_phase,
-                             self.should_update, workload, i, index_offset,
-                             self.seed)
+                             self._should_update, workload, i, index_offset,
+                             self._seed, self._episode_callbacks)
             self._async_loops.append(loop)
             index_offset += workload
 
