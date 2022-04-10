@@ -8,7 +8,7 @@ import unittest
 import numpy as np
 import torch
 
-from rlmeta.core.rescaler import NormRescaler, SqrtRescaler
+from rlmeta.core.rescalers import MomentsRescaler, RMSRescaler, SqrtRescaler
 from tests.test_utils import TestCaseBase
 
 
@@ -19,8 +19,28 @@ class RescalerTest(TestCaseBase):
         self.rtol = 1e-6
         self.atol = 1e-6
 
+    def test_rms_rescaler(self) -> None:
+        rms_rescaler = RMSRescaler(self.size)
+
+        batch_size = np.random.randint(low=1, high=10)
+        data = torch.rand(batch_size, *self.size)
+        for x in torch.unbind(data):
+            rms_rescaler.update(x)
+
+        x = torch.rand(*self.size)
+        y = rms_rescaler.rescale(x)
+        if batch_size == 1:
+            y_expected = x
+        else:
+            y_expected = x / data.square().mean(dim=0).sqrt()
+        self.assert_tensor_close(y, y_expected, rtol=self.rtol, atol=self.atol)
+        self.assert_tensor_close(rms_rescaler.recover(y),
+                                 x,
+                                 rtol=self.rtol,
+                                 atol=self.atol)
+
     def test_norm_rescaler(self) -> None:
-        norm_rescaler = NormRescaler(self.size)
+        norm_rescaler = MomentsRescaler(self.size)
 
         batch_size = np.random.randint(low=1, high=10)
         data = torch.rand(batch_size, *self.size)

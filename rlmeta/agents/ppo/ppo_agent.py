@@ -17,7 +17,7 @@ from rlmeta.agents.agent import Agent
 from rlmeta.core.controller import Controller, ControllerLike, Phase
 from rlmeta.core.model import ModelLike
 from rlmeta.core.replay_buffer import ReplayBufferLike
-from rlmeta.core.rescaler import RMSRescaler
+from rlmeta.core.rescalers import RMSRescaler
 from rlmeta.core.types import Action, TimeStep
 from rlmeta.core.types import Tensor, NestedTensor
 from rlmeta.utils.stats_dict import StatsDict
