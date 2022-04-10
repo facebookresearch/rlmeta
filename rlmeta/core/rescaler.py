@@ -10,7 +10,7 @@ from typing import Tuple, Union
 import torch
 import torch.nn as nn
 
-from rlmeta.utils.running_stats import RunningStats
+from rlmeta.utils.running_stats import RunningMoments, RunningRMS
 
 
 class Rescaler(nn.Module, abc.ABC):
@@ -31,28 +31,46 @@ class Rescaler(nn.Module, abc.ABC):
         """
 
 
-class NormRescaler(Rescaler):
+class RMSRescaler(Rescaler):
 
     def __init__(self, size: Union[int, Tuple[int]]) -> None:
         super().__init__()
         self._size = size
-        self._running_stats = RunningStats(size)
+        self._running_rms = RunningRMS(size)
 
     def reset(self) -> None:
-        self._running_stats.reset()
+        self._running_rms.reset()
 
     def update(self, x: torch.Tensor) -> None:
-        self._running_stats.update(x)
+        self._running_rms.update(x)
+
+    def rescale(self, x: torch.Tensor) -> torch.Tensor:
+        return x * self._running_rms.rrms()
+
+    def recover(self, x: torch.Tensor) -> torch.Tensor:
+        return x * self._running_rms.rms()
+
+
+class MomentsRescaler(Rescaler):
+
+    def __init__(self, size: Union[int, Tuple[int]]) -> None:
+        super().__init__()
+        self._size = size
+        self._running_moments = RunningMoments(size)
+
+    def reset(self) -> None:
+        self._running_moments.reset()
+
+    def update(self, x: torch.Tensor) -> None:
+        self._running_moments.update(x)
 
     def rescale(self, x: torch.Tensor, ddof=0) -> torch.Tensor:
-        if self._running_stats.count() <= 1:
-            return x
-        return (x - self._running_stats.mean()) * self._running_stats.rstd(ddof)
+        return x if self._running_moments.count() <= 1 else (
+            x - self._running_moments.mean()) * self._running_moments.rstd(ddof)
 
     def recover(self, x: torch.Tensor, ddof: int = 0) -> torch.Tensor:
-        if self._running_stats.count() <= 1:
-            return x
-        return x * self._running_stats.std(ddof) + self._running_stats.mean()
+        return x if self._running_moments.count() <= 1 else (
+            x * self._running_moments.std(ddof)) + self._running_moments.mean()
 
 
 class SqrtRescaler(Rescaler):

@@ -17,7 +17,7 @@ from rlmeta.agents.agent import Agent
 from rlmeta.core.controller import Controller, ControllerLike, Phase
 from rlmeta.core.model import ModelLike
 from rlmeta.core.replay_buffer import ReplayBufferLike
-from rlmeta.core.rescaler import NormRescaler
+from rlmeta.core.rescaler import RMSRescaler
 from rlmeta.core.types import Action, TimeStep
 from rlmeta.core.types import Tensor, NestedTensor
 from rlmeta.utils.stats_dict import StatsDict
@@ -61,7 +61,7 @@ class PPOAgent(Agent):
         self.advantage_normalization = advantage_normalization
         self.reward_rescaling = reward_rescaling
         if self.reward_rescaling:
-            self.reward_rescaler = NormRescaler(size=1)
+            self.reward_rescaler = RMSRescaler(size=1)
         self.value_clip = value_clip
 
         self.learning_starts = learning_starts
