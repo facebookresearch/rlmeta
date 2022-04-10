@@ -14,7 +14,7 @@ import torch.nn.functional as F
 import rlmeta.core.remote as remote
 
 from rlmeta.agents.dqn.dqn_model import DQNModel
-from rlmeta.core.rescaler import SqrtRescaler
+from rlmeta.core.rescalers import SqrtRescaler
 from rlmeta.core.types import NestedTensor
 
 
