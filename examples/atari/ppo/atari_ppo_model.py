@@ -11,6 +11,7 @@ import torch.nn.functional as F
 
 import rlmeta.core.remote as remote
 
+from examples.atari.backbone import AtariBackbone
 from rlmeta.agents.ppo.ppo_model import PPOModel
 
 
@@ -19,20 +20,9 @@ class AtariPPOModel(PPOModel):
     def __init__(self, action_dim: int) -> None:
         super().__init__()
         self.action_dim = action_dim
-
-        layers = []
-        layers.append(nn.Conv2d(4, 32, kernel_size=8, stride=4))
-        layers.append(nn.ReLU())
-        layers.append(nn.Conv2d(32, 64, kernel_size=4, stride=2))
-        layers.append(nn.ReLU())
-        layers.append(nn.Conv2d(64, 64, kernel_size=3, stride=1))
-        layers.append(nn.ReLU())
-        layers.append(nn.Flatten())
-        layers.append(nn.Linear(3136, 512))
-        layers.append(nn.ReLU())
-        self.backbone = nn.Sequential(*layers)
-        self.linear_p = nn.Linear(512, self.action_dim)
-        self.linear_v = nn.Linear(512, 1)
+        self.backbone = AtariBackbone()
+        self.linear_p = nn.Linear(self.backbone.output_dim, self.action_dim)
+        self.linear_v = nn.Linear(self.backbone.output_dim, 1)
 
     def forward(self, obs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         x = obs.float() / 255.0

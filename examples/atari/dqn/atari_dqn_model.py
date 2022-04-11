@@ -13,6 +13,7 @@ import torch.nn.functional as F
 
 import rlmeta.core.remote as remote
 
+from examples.atari.backbone import AtariBackbone
 from rlmeta.agents.dqn.dqn_model import DQNModel
 from rlmeta.core.rescalers import SqrtRescaler
 from rlmeta.core.types import NestedTensor
@@ -25,19 +26,10 @@ class AtariDQNNet(nn.Module):
         self.action_dim = action_dim
         self.dueling_dqn = dueling_dqn
 
-        layers = []
-        layers.append(nn.Conv2d(4, 32, kernel_size=8, stride=4))
-        layers.append(nn.ReLU())
-        layers.append(nn.Conv2d(32, 64, kernel_size=4, stride=2))
-        layers.append(nn.ReLU())
-        layers.append(nn.Conv2d(64, 64, kernel_size=3, stride=1))
-        layers.append(nn.ReLU())
-        layers.append(nn.Flatten())
-        layers.append(nn.Linear(3136, 512))
-        layers.append(nn.ReLU())
-        self.backbone = nn.Sequential(*layers)
-        self.linear_a = nn.Linear(512, self.action_dim)
-        self.linear_v = nn.Linear(512, 1) if dueling_dqn else None
+        self.backbone = AtariBackbone()
+        self.linear_a = nn.Linear(self.backbone.output_dim, self.action_dim)
+        self.linear_v = nn.Linear(self.backbone.output_dim,
+                                  1) if dueling_dqn else None
 
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
         x = obs.float() / 255.0

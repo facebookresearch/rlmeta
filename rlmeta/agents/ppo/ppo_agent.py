@@ -5,7 +5,7 @@
 
 import time
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -17,7 +17,7 @@ from rlmeta.agents.agent import Agent
 from rlmeta.core.controller import Controller, ControllerLike, Phase
 from rlmeta.core.model import ModelLike
 from rlmeta.core.replay_buffer import ReplayBufferLike
-from rlmeta.core.rescalers import RMSRescaler
+from rlmeta.core.rescalers import Rescaler, RMSRescaler
 from rlmeta.core.types import Action, TimeStep
 from rlmeta.core.types import Tensor, NestedTensor
 from rlmeta.utils.stats_dict import StatsDict
@@ -36,13 +36,13 @@ class PPOAgent(Agent):
                  gamma: float = 0.99,
                  gae_lambda: float = 0.95,
                  eps_clip: float = 0.2,
-                 entropy_ratio: float = 0.01,
-                 advantage_normalization: bool = True,
+                 entropy_coeff: float = 0.01,
                  reward_rescaling: bool = True,
+                 advantage_normalization: bool = True,
                  value_clip: bool = True,
                  learning_starts: Optional[int] = None,
                  push_every_n_steps: int = 1) -> None:
-        super(PPOAgent, self).__init__()
+        super().__init__()
 
         self.model = model
         self.deterministic_policy = deterministic_policy
@@ -57,17 +57,24 @@ class PPOAgent(Agent):
         self.gamma = gamma
         self.gae_lambda = gae_lambda
         self.eps_clip = eps_clip
-        self.entropy_ratio = entropy_ratio
-        self.advantage_normalization = advantage_normalization
+        self.entropy_coeff = entropy_coeff
         self.reward_rescaling = reward_rescaling
         if self.reward_rescaling:
             self.reward_rescaler = RMSRescaler(size=1)
+        self.advantage_normalization = advantage_normalization
         self.value_clip = value_clip
 
         self.learning_starts = learning_starts
         self.push_every_n_steps = push_every_n_steps
         self.done = False
         self.trajectory = []
+
+        self._device = None
+
+    def device(self) -> torch.device:
+        if self._device is None:
+            self._device = next(self.model.parameters()).device
+        return self._device
 
     def act(self, timestep: TimeStep) -> Action:
         obs = timestep.observation
@@ -94,10 +101,10 @@ class PPOAgent(Agent):
         obs, reward, done, _ = next_timestep
 
         cur = self.trajectory[-1]
-        cur["reward"] = reward
         cur["action"] = act
         cur["logpi"] = info["logpi"]
         cur["v"] = info["v"]
+        cur["reward"] = reward
 
         if not done:
             self.trajectory.append({"obs": obs})
@@ -107,7 +114,7 @@ class PPOAgent(Agent):
         if not self.done:
             return
         if self.replay_buffer is not None:
-            replay = self.make_replay()
+            replay = self._make_replay()
             self.replay_buffer.extend(replay)
         self.trajectory = []
 
@@ -115,7 +122,7 @@ class PPOAgent(Agent):
         if not self.done:
             return
         if self.replay_buffer is not None:
-            replay = self.make_replay()
+            replay = self._make_replay()
             await self.replay_buffer.async_extend(replay)
         self.trajectory = []
 
@@ -128,7 +135,7 @@ class PPOAgent(Agent):
             t0 = time.perf_counter()
             batch = self.replay_buffer.sample(self.batch_size)
             t1 = time.perf_counter()
-            step_stats = self.train_step(batch)
+            step_stats = self._train_step(batch)
             t2 = time.perf_counter()
             time_stats = {
                 "sample_data_time/ms": (t1 - t0) * 1000.0,
@@ -152,69 +159,61 @@ class PPOAgent(Agent):
         stats = self.controller.get_stats()
         return stats
 
-    def make_replay(self) -> List[NestedTensor]:
-        v = 0.0
-        gae = 0.0
-        ret = []
-        for cur in reversed(self.trajectory):
-            reward = cur.pop("reward")
-            v_ = v
-            v = cur["v"]
-            if self.reward_rescaling:
-                v = self.reward_rescaler.recover(v)
-            delta = reward + self.gamma * v_ - v
-            gae = delta + self.gamma * self.gae_lambda * gae
-            cur["gae"] = gae
-            ret.append(gae + v)
-
-        if self.reward_rescaling:
-            ret = data_utils.stack_tensors(ret)
-            self.reward_rescaler.update(ret)
-            ret = self.reward_rescaler.rescale(ret)
-            ret = ret.unbind()
-        for cur, r in zip(self.trajectory, reversed(ret)):
-            cur["return"] = r
-
+    def _make_replay(self) -> List[NestedTensor]:
+        adv, ret = self._calculate_gae_and_return(
+            [x["v"] for x in self.trajectory],
+            [x["reward"] for x in self.trajectory],
+            self.reward_rescaler if self.reward_rescaling else None)
+        for cur, a, r in zip(self.trajectory, adv, ret):
+            cur["gae"] = a
+            cur["ret"] = r
+            cur.pop("reward")
         return self.trajectory
 
-    def train_step(self, batch: NestedTensor) -> Dict[str, float]:
-        device = next(self.model.parameters()).device
-        batch = nested_utils.map_nested(lambda x: x.to(device), batch)
+    def _calculate_gae_and_return(
+        self,
+        values: Sequence[Union[float, torch.Tensor]],
+        rewards: Sequence[Union[float, torch.Tensor]],
+        reward_rescaler: Optional[Rescaler] = None
+    ) -> Tuple[Iterable[torch.Tensor], Iterable[torch.Tensor]]:
+        adv = []
+        ret = []
+        v = torch.zeros(1)
+        gae = torch.zeros(1)
+        for value, reward in zip(reversed(values), reversed(rewards)):
+            next_v = v
+            v = value
+            if reward_rescaler is not None:
+                v = reward_rescaler.recover(v)
+            delta = reward + self.gamma * next_v - v
+            gae = delta + self.gamma * self.gae_lambda * gae
+            adv.append(gae)
+            ret.append(gae + v)
+
+        if reward_rescaler is not None:
+            ret = data_utils.stack_tensors(ret)
+            reward_rescaler.update(ret)
+            ret = reward_rescaler.rescale(ret)
+            ret = ret.unbind()
+
+        return reversed(adv), reversed(ret)
+
+    def _train_step(self, batch: NestedTensor) -> Dict[str, float]:
+        batch = nested_utils.map_nested(lambda x: x.to(self.device()), batch)
         self.optimizer.zero_grad()
 
-        action = batch["action"]
-        action_logpi = batch["logpi"]
+        obs = batch["obs"]
+        act = batch["action"]
+        old_logpi = batch["logpi"]
         adv = batch["gae"]
-        ret = batch["return"]
-        logpi, v = self.model_forward(batch)
+        ret = batch["ret"]
+        logpi, v = self._model_forward(obs)
 
-        if self.value_clip:
-            # Value clip
-            v_batch = batch["v"]
-            v_clamp = v_batch + (v - v_batch).clamp(-self.eps_clip,
-                                                    self.eps_clip)
-            vf1 = (ret - v).square()
-            vf2 = (ret - v_clamp).square()
-            value_loss = torch.max(vf1, vf2).mean() * 0.5
-        else:
-            value_loss = (ret - v).square().mean() * 0.5
-
-        entropy = -(logpi.exp() * logpi).sum(dim=-1).mean()
-        entropy_loss = -self.entropy_ratio * entropy
-
-        if self.advantage_normalization:
-            # Advantage normalization
-            std, mean = torch.std_mean(adv, unbiased=False)
-            adv = (adv - mean) / std
-
-        # Policy clip
-        logpi = logpi.gather(dim=-1, index=action)
-        ratio = (logpi - action_logpi).exp()
-        ratio_clamp = ratio.clamp(1.0 - self.eps_clip, 1.0 + self.eps_clip)
-        surr1 = ratio * adv
-        surr2 = ratio_clamp * adv
-        policy_loss = -torch.min(surr1, surr2).mean()
-
+        policy_loss, ratio = self._policy_loss(logpi.gather(dim=-1, index=act),
+                                               old_logpi, adv)
+        value_loss = self._value_loss(ret, v, batch.get("v", None))
+        entropy = self._entropy(logpi)
+        entropy_loss = -self.entropy_coeff * entropy
         loss = policy_loss + value_loss + entropy_loss
         loss.backward()
         grad_norm = nn.utils.clip_grad_norm_(self.model.parameters(),
@@ -223,15 +222,47 @@ class PPOAgent(Agent):
 
         return {
             "return": ret.detach().mean().item(),
-            "entropy": entropy.detach().mean().item(),
             "policy_ratio": ratio.detach().mean().item(),
             "policy_loss": policy_loss.detach().mean().item(),
             "value_loss": value_loss.detach().mean().item(),
+            "entropy": entropy.detach().mean().item(),
             "entropy_loss ": entropy_loss.detach().mean().item(),
             "loss": loss.detach().mean().item(),
             "grad_norm": grad_norm.detach().mean().item(),
         }
 
-    def model_forward(self,
-                      batch: NestedTensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        return self.model(batch["obs"])
+    def _model_forward(self, obs: torch.Tensor) -> Tuple[torch.Tensor, ...]:
+        return self.model(obs)
+
+    def _policy_loss(self, logpi: torch.Tensor, old_logpi: torch.Tensor,
+                     adv: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        if self.advantage_normalization:
+            # Advantage normalization
+            std, mean = torch.std_mean(adv, unbiased=False)
+            adv = (adv - mean) / std
+
+        # Policy clip
+        ratio = (logpi - old_logpi).exp()
+        ratio_clamp = ratio.clamp(1.0 - self.eps_clip, 1.0 + self.eps_clip)
+        surr1 = ratio * adv
+        surr2 = ratio_clamp * adv
+        policy_loss = -torch.min(surr1, surr2).mean()
+
+        return policy_loss, ratio
+
+    def _value_loss(self,
+                    ret: torch.Tensor,
+                    v: torch.Tensor,
+                    old_v: Optional[torch.Tensor] = None) -> torch.Tensor:
+        if self.value_clip:
+            # Value clip
+            v_clamp = old_v + (v - old_v).clamp(-self.eps_clip, self.eps_clip)
+            vf1 = (ret - v).square()
+            vf2 = (ret - v_clamp).square()
+            value_loss = torch.max(vf1, vf2).mean() * 0.5
+        else:
+            value_loss = (ret - v).square().mean() * 0.5
+        return value_loss
+
+    def _entropy(self, logpi: torch.Tensor) -> torch.Tensor:
+        return -(logpi.exp() * logpi).sum(dim=-1).mean()
