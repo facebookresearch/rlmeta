@@ -32,10 +32,11 @@ class PPOAgent(Agent):
                  controller: Optional[ControllerLike] = None,
                  optimizer: Optional[torch.optim.Optimizer] = None,
                  batch_size: int = 128,
-                 grad_clip: float = 50.0,
+                 grad_clip: float = 1.0,
                  gamma: float = 0.99,
                  gae_lambda: float = 0.95,
                  eps_clip: float = 0.2,
+                 vf_loss_coeff: float = 0.5,
                  entropy_coeff: float = 0.01,
                  reward_rescaling: bool = True,
                  advantage_normalization: bool = True,
@@ -57,6 +58,7 @@ class PPOAgent(Agent):
         self.gamma = gamma
         self.gae_lambda = gae_lambda
         self.eps_clip = eps_clip
+        self.vf_loss_coeff = vf_loss_coeff
         self.entropy_coeff = entropy_coeff
         self.reward_rescaling = reward_rescaling
         if self.reward_rescaling:
@@ -213,8 +215,8 @@ class PPOAgent(Agent):
                                                old_logpi, adv)
         value_loss = self._value_loss(ret, v, batch.get("v", None))
         entropy = self._entropy(logpi)
-        entropy_loss = -self.entropy_coeff * entropy
-        loss = policy_loss + value_loss + entropy_loss
+        loss = policy_loss + (self.vf_loss_coeff *
+                              value_loss) - (self.entropy_coeff * entropy)
         loss.backward()
         grad_norm = nn.utils.clip_grad_norm_(self.model.parameters(),
                                              self.grad_clip)
@@ -226,7 +228,6 @@ class PPOAgent(Agent):
             "policy_loss": policy_loss.detach().mean().item(),
             "value_loss": value_loss.detach().mean().item(),
             "entropy": entropy.detach().mean().item(),
-            "entropy_loss ": entropy_loss.detach().mean().item(),
             "loss": loss.detach().mean().item(),
             "grad_norm": grad_norm.detach().mean().item(),
         }
