@@ -30,11 +30,12 @@ class PPORNDAgent(PPOAgent):
         controller: Optional[ControllerLike] = None,
         optimizer: Optional[torch.optim.Optimizer] = None,
         batch_size: int = 128,
-        grad_clip: float = 50.0,
+        grad_clip: float = 1.0,
         gamma: float = 0.99,
         gae_lambda: float = 0.95,
         eps_clip: float = 0.2,
         intrinsic_advantage_coeff: float = 0.5,
+        vf_loss_coeff: float = 0.5,
         entropy_coeff: float = 0.01,
         advantage_normalization: bool = True,
         reward_rescaling: bool = True,
@@ -46,9 +47,9 @@ class PPORNDAgent(PPOAgent):
     ) -> None:
         super().__init__(model, deterministic_policy, replay_buffer, controller,
                          optimizer, batch_size, grad_clip, gamma, gae_lambda,
-                         eps_clip, entropy_coeff, advantage_normalization,
-                         reward_rescaling, value_clip, learning_starts,
-                         push_every_n_steps)
+                         eps_clip, vf_loss_coeff, entropy_coeff,
+                         advantage_normalization, reward_rescaling, value_clip,
+                         learning_starts, push_every_n_steps)
 
         self.intrinsic_advantage_coeff = intrinsic_advantage_coeff
 
@@ -147,13 +148,11 @@ class PPORNDAgent(PPOAgent):
         int_value_loss = self._value_loss(int_ret, int_v,
                                           batch.get("int_v", None))
         value_loss = ext_value_loss + int_value_loss
-
         entropy = self._entropy(logpi)
-        entropy_loss = -self.entropy_coeff * entropy
-
         rnd_loss = self._rnd_loss(next_obs)
 
-        loss = policy_loss + value_loss + entropy_loss + rnd_loss
+        loss = policy_loss + (self.vf_loss_coeff * value_loss) - (
+            self.entropy_coeff * entropy) + rnd_loss
         loss.backward()
         grad_norm = nn.utils.clip_grad_norm_(self.model.parameters(),
                                              self.grad_clip)
@@ -168,7 +167,6 @@ class PPORNDAgent(PPOAgent):
             "int_value_loss": int_value_loss.detach().mean().item(),
             "value_loss": value_loss.detach().mean().item(),
             "entropy": entropy.detach().mean().item(),
-            "entropy_loss ": entropy_loss.detach().mean().item(),
             "rnd_loss": rnd_loss.detach().mean().item(),
             "loss": loss.detach().mean().item(),
             "grad_norm": grad_norm.detach().mean().item(),
