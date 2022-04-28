@@ -44,6 +44,10 @@ class Remote:
                  server_addr: str,
                  name: Optional[str] = None,
                  timeout: float = 60) -> None:
+        self._target = target
+        self._server_name = server_name
+        self._server_addr = server_addr
+
         self._remote_methods = target.remote_methods
         self._reset(server_name, server_addr, name, timeout)
         self._client_methods = {}
@@ -57,6 +61,9 @@ class Remote:
             if ret is not None:
                 return ret
             raise
+
+    def __repr__(self):
+        return f'Remote(target={self._target} server_name={self._server_name} server_addr={self._server_addr})'
 
     @property
     def name(self) -> str:

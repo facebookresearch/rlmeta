@@ -12,6 +12,7 @@ import logging
 import time
 
 from typing import Dict, List, NoReturn, Optional, Sequence, Union
+from rich.console import Console
 
 import torch
 import torch.multiprocessing as mp
@@ -27,6 +28,8 @@ from rlmeta.core.callbacks import EpisodeCallbacks
 from rlmeta.core.controller import Controller, ControllerLike, Phase
 from rlmeta.core.launchable import Launchable
 from rlmeta.envs.env import Env, EnvFactory
+
+console = Console()
 
 
 class Loop(abc.ABC):
@@ -133,6 +136,7 @@ class AsyncLoop(Loop, Launchable):
                 obj.init_execution()
 
     def run(self) -> NoReturn:
+        console.log(f"Starting async loop with: {self._controller}")
         self._loop = asyncio.get_event_loop()
         self._tasks.append(
             asycio_utils.create_task(self._loop, self._check_phase()))

@@ -8,7 +8,7 @@ import time
 import logging
 
 from typing import Callable, Optional, Sequence, Tuple, Union
-
+from rich.console import Console
 import numpy as np
 import torch
 
@@ -21,6 +21,8 @@ from rlmeta.core.segment_tree import SumSegmentTree, MinSegmentTree
 from rlmeta.core.server import Server
 from rlmeta.core.types import Tensor, NestedTensor
 from rlmeta_extension import CircularBuffer
+
+console = Console()
 
 
 class ReplayBuffer(remote.Remotable, Launchable):
@@ -260,6 +262,11 @@ class RemoteReplayBuffer(remote.Remote):
         super().__init__(target, server_name, server_addr, name, timeout)
         self._prefetch = prefetch
         self._futures = collections.deque()
+        self._server_name = server_name
+        self._server_addr = server_addr
+
+    def __repr__(self):
+        return f'RemoteReplayBuffer(server_name={self._server_name}, server_addr={self._server_addr})'
 
     @property
     def prefetch(self) -> Optional[int]:
@@ -304,8 +311,8 @@ class RemoteReplayBuffer(remote.Remote):
         while cur_size < target_size:
             time.sleep(1)
             cur_size = self.get_size()
-            logging.info("Warming up replay buffer: " +
-                         f"[{cur_size: {width}d} / {capacity} ]")
+            console.log("Warming up replay buffer: " +
+                        f"[{cur_size: {width}d} / {capacity} ]")
 
 
 ReplayBufferLike = Union[ReplayBuffer, RemoteReplayBuffer]

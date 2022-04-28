@@ -9,6 +9,8 @@ from typing import Callable, Dict, List, Optional, Sequence
 
 import torch
 import torch.nn as nn
+from rich.console import Console
+from rich.progress import track
 
 import rlmeta.utils.data_utils as data_utils
 import rlmeta_extension.nested_utils as nested_utils
@@ -20,6 +22,8 @@ from rlmeta.core.replay_buffer import ReplayBufferLike
 from rlmeta.core.types import Action, TimeStep
 from rlmeta.core.types import NestedTensor
 from rlmeta.utils.stats_dict import StatsDict
+
+console = Console()
 
 
 class ApeXDQNAgent(Agent):
@@ -39,7 +43,8 @@ class ApeXDQNAgent(Agent):
         sync_every_n_steps: int = 10,
         push_every_n_steps: int = 1,
         collate_fn: Optional[Callable[[Sequence[NestedTensor]],
-                                      NestedTensor]] = None
+                                      NestedTensor]] = None,
+        additional_models_to_update: Optional[List[ModelLike]] = None,
     ) -> None:
         super().__init__()
 
@@ -57,6 +62,7 @@ class ApeXDQNAgent(Agent):
         self.gamma = gamma
         self.learning_starts = learning_starts
 
+        self._additional_models_to_update = additional_models_to_update
         self.sync_every_n_steps = sync_every_n_steps
         self.push_every_n_steps = push_every_n_steps
 
@@ -66,6 +72,12 @@ class ApeXDQNAgent(Agent):
             self.collate_fn = data_utils.stack_tensors
 
         self.trajectory = []
+
+    def connect(self) -> None:
+        super().connect()
+        if self._additional_models_to_update is not None:
+            for m in self._additional_models_to_update:
+                m.connect()
 
     def act(self, timestep: TimeStep) -> Action:
         obs = timestep.observation
@@ -113,11 +125,15 @@ class ApeXDQNAgent(Agent):
         self.trajectory = []
 
     def train(self, num_steps: int) -> Optional[StatsDict]:
+        console.log(f"Training for num_steps={num_steps}")
         self.controller.set_phase(Phase.TRAIN, reset=True)
 
+        console.log(f"Warming up replay buffer: {self.replay_buffer}")
+
         self.replay_buffer.warm_up(self.learning_starts)
+        console.log("Replay buffer warmed up!")
         stats = StatsDict()
-        for step in range(num_steps):
+        for step in track(range(num_steps), description="Training..."):
             t0 = time.perf_counter()
             batch, weight, index = self.replay_buffer.sample(self.batch_size)
             t1 = time.perf_counter()
@@ -132,9 +148,15 @@ class ApeXDQNAgent(Agent):
 
             if step % self.sync_every_n_steps == self.sync_every_n_steps - 1:
                 self.model.sync_target_net()
+                if self._additional_models_to_update is not None:
+                    for m in self._additional_models_to_update:
+                        m.sync_target_net()
 
             if step % self.push_every_n_steps == self.push_every_n_steps - 1:
                 self.model.push()
+                if self._additional_models_to_update is not None:
+                    for m in self._additional_models_to_update:
+                        m.push()
 
         episode_stats = self.controller.get_stats()
         stats.update(episode_stats)
@@ -218,7 +240,8 @@ class ApeXDQNAgentFactory(AgentFactory):
         sync_every_n_steps: int = 10,
         push_every_n_steps: int = 1,
         collate_fn: Optional[Callable[[Sequence[NestedTensor]],
-                                      NestedTensor]] = None
+                                      NestedTensor]] = None,
+        additional_models_to_update: Optional[List[ModelLike]] = None,
     ) -> None:
         self._model = model
         self._eps_func = eps_func
@@ -233,17 +256,28 @@ class ApeXDQNAgentFactory(AgentFactory):
         self._sync_every_n_steps = sync_every_n_steps
         self._push_every_n_steps = push_every_n_steps
         self._collate_fn = collate_fn
+        self._additional_models_to_update = additional_models_to_update
 
     def __call__(self, index: int):
         model = self._make_arg(self._model, index)
         eps = self._eps_func(index)
         replay_buffer = self._make_arg(self._replay_buffer, index)
         controller = self._make_arg(self._controller, index)
-        return ApeXDQNAgent(model, eps, replay_buffer, controller,
-                            self._optimizer, self._batch_size, self._grad_clip,
-                            self._multi_step, self._gamma,
-                            self._learning_starts, self._sync_every_n_steps,
-                            self._push_every_n_steps, self._collate_fn)
+        return ApeXDQNAgent(
+            model,
+            eps,
+            replay_buffer,
+            controller,
+            self._optimizer,
+            self._batch_size,
+            self._grad_clip,
+            self._multi_step,
+            self._gamma,
+            self._learning_starts,
+            self._sync_every_n_steps,
+            self._push_every_n_steps,
+            self._collate_fn,
+            additional_models_to_update=self._additional_models_to_update)
 
 
 class ConstantEpsFunc:

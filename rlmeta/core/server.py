@@ -12,6 +12,7 @@ from typing import Any, Callable, List, NoReturn, Optional, Sequence, Union
 
 import torch
 import torch.multiprocessing as mp
+from rich.console import Console
 
 import moolib
 
@@ -19,6 +20,8 @@ import rlmeta.utils.asycio_utils as asycio_utils
 
 from rlmeta.core.launchable import Launchable
 from rlmeta.core.remote import Remotable
+
+console = Console()
 
 
 class Server(Launchable):
@@ -33,6 +36,9 @@ class Server(Launchable):
         self._server = None
         self._loop = None
         self._tasks = None
+
+    def __repr__(self):
+        return f'Server(name={self._name} addr={self._addr})'
 
     @property
     def name(self) -> str:
@@ -82,11 +88,17 @@ class Server(Launchable):
         self._server = moolib.Rpc()
         self._server.set_name(self._name)
         self._server.set_timeout(self._timeout)
-        self._server.listen(self._addr)
+        console.log(f"Server={self.name} listening to {self._addr}")
+        try:
+            self._server.listen(self._addr)
+        except:
+            console.log(f"ERROR on listen({self._addr}) from: server={self}")
+            raise
 
     def _start_services(self) -> NoReturn:
         self._loop = asyncio.get_event_loop()
         self._tasks = []
+        console.log(f"Server={self.name} starting services: {self._services}")
         for service in self._services:
             for method in service.remote_methods:
                 method_impl = getattr(service, method)
@@ -103,6 +115,7 @@ class Server(Launchable):
                 task.cancel()
             self._loop.stop()
             self._loop.close()
+        console.log(f"Server={self.name} services started")
 
     def _add_server_task(self, func_name: str, func_impl: Callable[..., Any],
                          batch_size: Optional[int]) -> None:

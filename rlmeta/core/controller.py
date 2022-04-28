@@ -25,6 +25,9 @@ class Controller(remote.Remotable):
         self._limit = None
         self._stats = StatsDict()
 
+    def __repr__(self):
+        return f'Controller(phase={self._phase})'
+
     @property
     def phase(self) -> Phase:
         return self._phase
