@@ -17,7 +17,6 @@ from rich.console import Console
 import moolib
 
 import rlmeta.utils.asycio_utils as asycio_utils
-import rlmeta.utils.remote_utils as remote_utils
 
 from rlmeta.core.launchable import Launchable
 from rlmeta.core.remote import Remotable
@@ -104,9 +103,8 @@ class Server(Launchable):
             for method in service.remote_methods:
                 method_impl = getattr(service, method)
                 batch_size = getattr(method_impl, "__batch_size__", None)
-                self._add_server_task(
-                    remote_utils.remote_method_name(service, method),
-                    method_impl, batch_size)
+                self._add_server_task(service.remote_method_name(method),
+                                      method_impl, batch_size)
         try:
             if not self._loop.is_running():
                 self._loop.run_forever()

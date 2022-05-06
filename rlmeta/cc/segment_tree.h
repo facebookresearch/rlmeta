@@ -16,6 +16,7 @@
 #include <limits>
 #include <vector>
 
+#include "rlmeta/cc/numpy_utils.h"
 #include "rlmeta/cc/torch_utils.h"
 
 namespace py = pybind11;
@@ -63,10 +64,8 @@ class SegmentTree {
   }
 
   py::array_t<T> At(const py::array_t<int64_t>& index) const {
-    assert(index.ndim() == 1);
-    const int64_t n = index.size();
-    py::array_t<T> value(n);
-    BatchAtImpl(n, index.data(), value.mutable_data());
+    py::array_t<T> value = utils::NumpyEmptyLike<int64_t, T>(index);
+    BatchAtImpl(index.size(), index.data(), value.mutable_data());
     return value;
   }
 
@@ -104,13 +103,10 @@ class SegmentTree {
   }
 
   void Update(const py::array_t<int64_t>& index, const T& value) {
-    assert(index.ndim() == 1);
     BatchUpdateImpl(index.size(), index.data(), value);
   }
 
   void Update(const py::array_t<int64_t>& index, const py::array_t<T>& value) {
-    assert(index.ndim() == 1);
-    assert(value.ndim() == 1);
     assert(value.size() == 1 || index.size() == value.size());
     const int64_t n = index.size();
     if (value.size() == 1) {
@@ -177,12 +173,8 @@ class SegmentTree {
 
   py::array_t<T> Query(const py::array_t<int64_t>& l,
                        const py::array_t<int64_t>& r) const {
-    assert(l.ndim() == 1);
-    assert(r.ndim() == 1);
-    assert(l.size() == r.size());
-    const int64_t n = l.size();
-    py::array_t<T> ret(n);
-    BatchQueryImpl(n, l.data(), r.data(), ret.mutable_data());
+    py::array_t<T> ret = utils::NumpyEmptyLike<int64_t, T>(l);
+    BatchQueryImpl(l.size(), l.data(), r.data(), ret.mutable_data());
     return ret;
   }
 
@@ -279,10 +271,8 @@ class SumSegmentTree final : public SegmentTree<T, std::plus<T>> {
   }
 
   py::array_t<int64_t> ScanLowerBound(const py::array_t<T>& value) const {
-    assert(value.ndim() == 1);
-    const int64_t n = value.size();
-    py::array_t<int64_t> index(n);
-    BatchScanLowerBoundImpl(n, value.data(), index.mutable_data());
+    py::array_t<int64_t> index = utils::NumpyEmptyLike<T, int64_t>(value);
+    BatchScanLowerBoundImpl(value.size(), value.data(), index.mutable_data());
     return index;
   }
 
@@ -319,14 +309,15 @@ class MinSegmentTree final : public SegmentTree<T, MinOp<T>> {
 
 template <typename T>
 void DefineSumSegmentTree(const std::string& type, py::module& m) {
-  const std::string pyclass = type + "SumSegmentTree";
+  const std::string pyclass = "SumSegmentTree" + type;
   py::class_<SumSegmentTree<T>, std::shared_ptr<SumSegmentTree<T>>>(
       m, pyclass.c_str())
       .def(py::init<int64_t>())
       .def("__len__", &SumSegmentTree<T>::size)
-      .def("size", &SumSegmentTree<T>::size)
-      .def("capacity", &SumSegmentTree<T>::capacity)
-      .def("identity_element", &SumSegmentTree<T>::identity_element)
+      .def_property_readonly("size", &SumSegmentTree<T>::size)
+      .def_property_readonly("capacity", &SumSegmentTree<T>::capacity)
+      .def_property_readonly("identity_element",
+                             &SumSegmentTree<T>::identity_element)
       .def("__getitem__",
            py::overload_cast<int64_t>(&SumSegmentTree<T>::At, py::const_))
       .def("__getitem__", py::overload_cast<const py::array_t<int64_t>&>(
@@ -397,14 +388,15 @@ void DefineSumSegmentTree(const std::string& type, py::module& m) {
 
 template <typename T>
 void DefineMinSegmentTree(const std::string& type, py::module& m) {
-  const std::string pyclass = type + "MinSegmentTree";
+  const std::string pyclass = "MinSegmentTree" + type;
   py::class_<MinSegmentTree<T>, std::shared_ptr<MinSegmentTree<T>>>(
       m, pyclass.c_str())
       .def(py::init<int64_t>())
       .def("__len__", &MinSegmentTree<T>::size)
-      .def("size", &MinSegmentTree<T>::size)
-      .def("capacity", &MinSegmentTree<T>::capacity)
-      .def("identity_element", &MinSegmentTree<T>::identity_element)
+      .def_property_readonly("size", &MinSegmentTree<T>::size)
+      .def_property_readonly("capacity", &MinSegmentTree<T>::capacity)
+      .def_property_readonly("identity_element",
+                             &MinSegmentTree<T>::identity_element)
       .def("__getitem__",
            py::overload_cast<int64_t>(&MinSegmentTree<T>::At, py::const_))
       .def("__getitem__", py::overload_cast<const py::array_t<int64_t>&>(

@@ -14,11 +14,11 @@ namespace py = pybind11;
 namespace {
 
 PYBIND11_MODULE(rlmeta_extension, m) {
-  rlmeta::DefineSumSegmentTree<float>("Float", m);
-  rlmeta::DefineSumSegmentTree<double>("Double", m);
+  rlmeta::DefineSumSegmentTree<float>("Fp32", m);
+  rlmeta::DefineSumSegmentTree<double>("Fp64", m);
 
-  rlmeta::DefineMinSegmentTree<float>("Float", m);
-  rlmeta::DefineMinSegmentTree<double>("Double", m);
+  rlmeta::DefineMinSegmentTree<float>("Fp32", m);
+  rlmeta::DefineMinSegmentTree<double>("Fp64", m);
 
   rlmeta::DefineCircularBuffer(m);
 
