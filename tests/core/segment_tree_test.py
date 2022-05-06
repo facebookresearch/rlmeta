@@ -20,7 +20,7 @@ class SumSegmentTreeTest(TestCaseBase):
     def setUp(self) -> None:
         self.size = 100
         self.data = torch.randn(self.size)
-        self.segment_tree = SumSegmentTree(self.size)
+        self.segment_tree = SumSegmentTree(self.size, dtype=np.float32)
         self.segment_tree[torch.arange(self.size)] = self.data
         self.query_size = (2, 3, 4)
 
@@ -30,6 +30,11 @@ class SumSegmentTreeTest(TestCaseBase):
         self.assert_tensor_equal(value, self.data[index])
         value = self.segment_tree.at(index)
         self.assert_tensor_equal(value, self.data[index])
+
+        value = self.segment_tree[index.numpy()]
+        self.assert_tensor_equal(value, self.data[index].numpy())
+        value = self.segment_tree.at(index.numpy())
+        self.assert_tensor_equal(value, self.data[index].numpy())
 
     def test_update(self) -> None:
         weights = torch.ones(self.size)

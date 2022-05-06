@@ -8,11 +8,11 @@ from typing import Union
 import numpy as np
 import torch
 
-from rlmeta_extension import FloatSumSegmentTree, DoubleSumSegmentTree
-from rlmeta_extension import FloatMinSegmentTree, DoubleMinSegmentTree
+from rlmeta_extension import SumSegmentTreeFp32, SumSegmentTreeFp64
+from rlmeta_extension import MinSegmentTreeFp32, MinSegmentTreeFp64
 
-SegmentTreeImpl = Union[FloatSumSegmentTree, DoubleSumSegmentTree,
-                        FloatMinSegmentTree, DoubleMinSegmentTree]
+SegmentTreeImpl = Union[SumSegmentTreeFp32, SumSegmentTreeFp64,
+                        MinSegmentTreeFp32, MinSegmentTreeFp64]
 Index = Union[int, np.ndarray, torch.Tensor]
 Value = Union[float, np.ndarray, torch.Tensor]
 
@@ -21,7 +21,7 @@ class SegmentTree:
 
     def __init__(self,
                  impl: SegmentTreeImpl,
-                 dtype: np.dtype = np.float32) -> None:
+                 dtype: np.dtype = np.float64) -> None:
         self._impl = impl
         self._dtype = dtype
 
@@ -29,14 +29,16 @@ class SegmentTree:
     def dtype(self) -> np.dtype:
         return self._dtype
 
+    @property
+    def size(self) -> int:
+        return self._impl.size
+
+    @property
+    def capacity(self) -> int:
+        return self._impl.capacity
+
     def __len__(self) -> int:
         return len(self._impl)
-
-    def size(self) -> int:
-        return self._impl.size()
-
-    def capacity(self) -> int:
-        return self._impl.capacity()
 
     def __getitem__(self, index: Index) -> Value:
         return self._impl[index]
@@ -56,11 +58,11 @@ class SegmentTree:
 
 class SumSegmentTree(SegmentTree):
 
-    def __init__(self, size: int, dtype: np.dtype = np.float32) -> None:
+    def __init__(self, size: int, dtype: np.dtype = np.float64) -> None:
         if dtype == np.float32:
-            impl = FloatSumSegmentTree(size)
+            impl = SumSegmentTreeFp32(size)
         elif dtype == np.float64:
-            impl = DoubleSumSegmentTree(size)
+            impl = SumSegmentTreeFp64(size)
         else:
             assert False, "Unsupported data type " + str(dtype)
         super().__init__(impl, dtype)
@@ -71,11 +73,11 @@ class SumSegmentTree(SegmentTree):
 
 class MinSegmentTree(SegmentTree):
 
-    def __init__(self, size: int, dtype: np.dtype = np.float32) -> None:
+    def __init__(self, size: int, dtype: np.dtype = np.float64) -> None:
         if dtype == np.float32:
-            impl = FloatMinSegmentTree(size)
+            impl = MinSegmentTreeFp32(size)
         elif dtype == np.float64:
-            impl = DoubleMinSegmentTree(size)
+            impl = MinSegmentTreeFp64(size)
         else:
             assert False, "Unsupported data type " + str(dtype)
         super().__init__(impl, dtype)

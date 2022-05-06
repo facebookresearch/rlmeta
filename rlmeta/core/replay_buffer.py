@@ -14,7 +14,6 @@ import torch
 
 import rlmeta.core.remote as remote
 import rlmeta.utils.data_utils as data_utils
-import rlmeta.utils.remote_utils as remote_utils
 import rlmeta_extension.nested_utils as nested_utils
 
 from rlmeta.core.launchable import Launchable
@@ -283,14 +282,14 @@ class RemoteReplayBuffer(remote.Remote):
         if len(self._futures) > 0:
             ret = self._futures.popleft().result()
         else:
-            ret = self.client.sync(
-                self.server_name,
-                remote_utils.remote_method_name(self, "sample"), batch_size)
+            ret = self.client.sync(self.server_name,
+                                   self.remote_method_name("sample"),
+                                   batch_size)
 
         while len(self._futures) < self.prefetch:
-            fut = self.client.async_(
-                self.server_name,
-                remote_utils.remote_method_name(self, "sample"), batch_size)
+            fut = self.client.async_(self.server_name,
+                                     self.remote_method_name("sample"),
+                                     batch_size)
             self._futures.append(fut)
 
         return ret
@@ -301,14 +300,14 @@ class RemoteReplayBuffer(remote.Remote):
         if len(self._futures) > 0:
             ret = await self._futures.popleft()
         else:
-            ret = await self.client.async_(
-                self.server_name,
-                remote_utils.remote_method_name(self, "sample"), batch_size)
+            ret = await self.client.async_(self.server_name,
+                                           self.remote_method_name("sample"),
+                                           batch_size)
 
         while len(self._futures) < self.prefetch:
-            fut = self.client.async_(
-                self.server_name,
-                remote_utils.remote_method_name(self, "sample"), batch_size)
+            fut = self.client.async_(self.server_name,
+                                     self.remote_method_name("sample"),
+                                     batch_size)
             self._futures.append(fut)
 
         return ret

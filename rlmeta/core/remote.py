@@ -12,8 +12,6 @@ from typing import Any, Callable, List, Optional
 
 import moolib
 
-import rlmeta.utils.remote_utils as remote_utils
-
 from rlmeta.core.launchable import Launchable
 from rlmeta.utils.moolib_utils import generate_random_name
 
@@ -43,6 +41,10 @@ class Remotable(abc.ABC, metaclass=RemotableMeta):
     @property
     def identifier(self) -> Optional[str]:
         return self._identifier
+
+    def remote_method_name(self, method: str) -> str:
+        return method if self._identifier is None else (self._identifier +
+                                                        "::" + method)
 
 
 class Remote:
@@ -107,6 +109,10 @@ class Remote:
     def identifier(self) -> Optional[str]:
         return self._identifier
 
+    def remote_method_name(self, method: str) -> str:
+        return method if self._identifier is None else (self._identifier +
+                                                        "::" + method)
+
     def connect(self) -> None:
         if self._connected:
             return
@@ -135,10 +141,10 @@ class Remote:
         for method in self._remote_methods:
             self._client_methods[method] = functools.partial(
                 self.client.sync, self.server_name,
-                remote_utils.remote_method_name(self, method))
+                self.remote_method_name(method))
             self._client_methods["async_" + method] = functools.partial(
                 self.client.async_, self.server_name,
-                remote_utils.remote_method_name(self, method))
+                self.remote_method_name(method))
 
 
 def remote_method(batch_size: Optional[int] = None) -> Callable[..., Any]:
