@@ -14,6 +14,7 @@ import torch
 
 import rlmeta.core.remote as remote
 import rlmeta.utils.data_utils as data_utils
+import rlmeta.utils.remote_utils as remote_utils
 import rlmeta_extension.nested_utils as nested_utils
 
 from rlmeta.core.launchable import Launchable
@@ -31,13 +32,13 @@ class ReplayBuffer(remote.Remotable, Launchable):
                  capacity: int,
                  collate_fn: Optional[Callable[[Sequence[NestedTensor]],
                                                NestedTensor]] = None,
-                 identifier: str = ""):
+                 identifier: Optional[str] = None):
+        remote.Remotable.__init__(self, identifier)
         self._buffer = CircularBuffer(capacity)
         if collate_fn is not None:
             self._collate_fn = collate_fn
         else:
             self._collate_fn = data_utils.stack_tensors
-        remote.Remotable.__init__(self, identifier)
 
     def __len__(self) -> int:
         return self.size
@@ -104,8 +105,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
                  collate_fn: Optional[Callable[[Sequence[NestedTensor]],
                                                NestedTensor]] = None,
                  priority_type: np.dtype = np.float32,
-                 identifier: str = "") -> None:
-        super().__init__(capacity, collate_fn, identifier=identifier)
+                 identifier: Optional[str] = None) -> None:
+        super().__init__(capacity, collate_fn, identifier)
 
         assert alpha > 0
         assert beta >= 0
@@ -269,7 +270,8 @@ class RemoteReplayBuffer(remote.Remote):
         self._server_addr = server_addr
 
     def __repr__(self):
-        return f'RemoteReplayBuffer(server_name={self._server_name}, server_addr={self._server_addr})'
+        return f"RemoteReplayBuffer(server_name={self._server_name}, " + \
+                f"server_addr={self._server_addr})"
 
     @property
     def prefetch(self) -> Optional[int]:
@@ -281,10 +283,14 @@ class RemoteReplayBuffer(remote.Remote):
         if len(self._futures) > 0:
             ret = self._futures.popleft().result()
         else:
-            ret = self.client.sync(self.server_name, "sample", batch_size)
+            ret = self.client.sync(
+                self.server_name,
+                remote_utils.remote_method_name(self, "sample"), batch_size)
 
         while len(self._futures) < self.prefetch:
-            fut = self.client.async_(self.server_name, "sample", batch_size)
+            fut = self.client.async_(
+                self.server_name,
+                remote_utils.remote_method_name(self, "sample"), batch_size)
             self._futures.append(fut)
 
         return ret
@@ -295,11 +301,14 @@ class RemoteReplayBuffer(remote.Remote):
         if len(self._futures) > 0:
             ret = await self._futures.popleft()
         else:
-            ret = await self.client.async_(self.server_name, "sample",
-                                           batch_size)
+            ret = await self.client.async_(
+                self.server_name,
+                remote_utils.remote_method_name(self, "sample"), batch_size)
 
         while len(self._futures) < self.prefetch:
-            fut = self.client.async_(self.server_name, "sample", batch_size)
+            fut = self.client.async_(
+                self.server_name,
+                remote_utils.remote_method_name(self, "sample"), batch_size)
             self._futures.append(fut)
 
         return ret

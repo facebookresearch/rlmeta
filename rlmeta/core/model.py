@@ -9,6 +9,7 @@ import torch
 import torch.nn as nn
 
 import rlmeta.core.remote as remote
+import rlmeta.utils.remote_utils as remote_utils
 import rlmeta_extension.nested_utils as nested_utils
 
 from rlmeta.core.server import Server
@@ -16,7 +17,8 @@ from rlmeta.core.server import Server
 
 class RemotableModel(nn.Module, remote.Remotable):
 
-    def __init__(self, identifier: str = ""):
+    def __init__(self, identifier: Optional[str] = None):
+        nn.Module.__init__(self)
         remote.Remotable.__init__(self, identifier)
 
     def init_launching(self) -> None:
@@ -59,22 +61,28 @@ class DownstreamModel(remote.Remote):
         return self.wrapped(*args, **kwargs)
 
     def pull(self) -> None:
-        state_dict = self.client.sync(self.server_name, "pull")
+        state_dict = self.client.sync(
+            self.server_name, remote_utils.remote_method_name(self, "pull"))
         self.wrapped.load_state_dict(state_dict)
 
     async def async_pull(self) -> None:
-        state_dict = await self.client.async_(self.server_name, "pull")
+        state_dict = await self.client.async_(
+            self.server_name, remote_utils.remote_method_name(self, "pull"))
         self.wrapped.load_state_dict(state_dict)
 
     def push(self) -> None:
         state_dict = self.wrapped.state_dict()
         state_dict = nested_utils.map_nested(lambda x: x.cpu(), state_dict)
-        self.client.sync(self.server_name, "push", state_dict)
+        self.client.sync(self.server_name,
+                         remote_utils.remote_method_name(self, "push"),
+                         state_dict)
 
     async def async_push(self) -> None:
         state_dict = self.wrapped.state_dict()
         state_dict = nested_utils.map_nested(lambda x: x.cpu(), state_dict)
-        await self.client.async_(self.server_name, "push", state_dict)
+        await self.client.async_(self.server_name,
+                                 remote_utils.remote_method_name(self, "push"),
+                                 state_dict)
 
     def _bind(self) -> None:
         pass
