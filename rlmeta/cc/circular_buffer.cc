@@ -89,10 +89,10 @@ void DefineCircularBuffer(py::module& m) {
   py::class_<CircularBuffer, std::shared_ptr<CircularBuffer>>(m,
                                                               "CircularBuffer")
       .def(py::init<int64_t>())
+      .def_property_readonly("size", &CircularBuffer::Size)
+      .def_property_readonly("capacity", &CircularBuffer::capacity)
+      .def_property_readonly("cursor", &CircularBuffer::cursor)
       .def("__len__", &CircularBuffer::Size)
-      .def("size", &CircularBuffer::Size)
-      .def("capacity", &CircularBuffer::capacity)
-      .def("cursor", &CircularBuffer::cursor)
       .def("__getitem__",
            py::overload_cast<int64_t>(&CircularBuffer::At, py::const_))
       .def("__getitem__", py::overload_cast<const py::array_t<int64_t>&>(
