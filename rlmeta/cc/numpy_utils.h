@@ -20,7 +20,9 @@ template <typename T>
 std::vector<int64_t> NumpyArrayShape(const py::array_t<T>& arr) {
   const int64_t ndim = arr.ndim();
   std::vector<int64_t> shape(ndim);
-  std::copy(arr.shape(), arr.shape() + ndim, shape.begin());
+  for (int64_t i = 0; i < ndim; ++i) {
+    shape[i] = static_cast<int64_t>(arr.shape(i));
+  }
   return shape;
 }
 
