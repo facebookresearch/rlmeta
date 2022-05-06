@@ -313,11 +313,11 @@ void DefineSumSegmentTree(const std::string& type, py::module& m) {
   py::class_<SumSegmentTree<T>, std::shared_ptr<SumSegmentTree<T>>>(
       m, pyclass.c_str())
       .def(py::init<int64_t>())
-      .def("__len__", &SumSegmentTree<T>::size)
       .def_property_readonly("size", &SumSegmentTree<T>::size)
       .def_property_readonly("capacity", &SumSegmentTree<T>::capacity)
       .def_property_readonly("identity_element",
                              &SumSegmentTree<T>::identity_element)
+      .def("__len__", &SumSegmentTree<T>::size)
       .def("__getitem__",
            py::overload_cast<int64_t>(&SumSegmentTree<T>::At, py::const_))
       .def("__getitem__", py::overload_cast<const py::array_t<int64_t>&>(
