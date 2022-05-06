@@ -10,6 +10,9 @@ from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
 import torch
 import torch.nn as nn
 
+from rich.console import Console
+from rich.progress import track
+
 import rlmeta_extension.nested_utils as nested_utils
 import rlmeta.utils.data_utils as data_utils
 
@@ -21,6 +24,8 @@ from rlmeta.core.rescalers import Rescaler, RMSRescaler
 from rlmeta.core.types import Action, TimeStep
 from rlmeta.core.types import Tensor, NestedTensor
 from rlmeta.utils.stats_dict import StatsDict
+
+console = Console()
 
 
 class PPOAgent(Agent):
@@ -133,7 +138,9 @@ class PPOAgent(Agent):
 
         self.replay_buffer.warm_up(self.learning_starts)
         stats = StatsDict()
-        for step in range(num_steps):
+
+        console.log(f"Training for num_steps = {num_steps}")
+        for step in track(range(num_steps), description="Training..."):
             t0 = time.perf_counter()
             batch = self.replay_buffer.sample(self.batch_size)
             t1 = time.perf_counter()

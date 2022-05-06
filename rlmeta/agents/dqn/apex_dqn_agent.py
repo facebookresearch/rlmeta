@@ -9,6 +9,7 @@ from typing import Callable, Dict, List, Optional, Sequence
 
 import torch
 import torch.nn as nn
+
 from rich.console import Console
 from rich.progress import track
 
@@ -125,14 +126,12 @@ class ApeXDQNAgent(Agent):
         self.trajectory = []
 
     def train(self, num_steps: int) -> Optional[StatsDict]:
-        console.log(f"Training for num_steps={num_steps}")
         self.controller.set_phase(Phase.TRAIN, reset=True)
 
-        console.log(f"Warming up replay buffer: {self.replay_buffer}")
-
         self.replay_buffer.warm_up(self.learning_starts)
-        console.log("Replay buffer warmed up!")
         stats = StatsDict()
+
+        console.log(f"Training for num_steps = {num_steps}")
         for step in track(range(num_steps), description="Training..."):
             t0 = time.perf_counter()
             batch, weight, index = self.replay_buffer.sample(self.batch_size)
