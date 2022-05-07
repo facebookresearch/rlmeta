@@ -27,7 +27,7 @@ from rlmeta.utils.stats_dict import StatsDict
 console = Console()
 
 
-class ApeXDQNAgent(Agent):
+class ApexDQNAgent(Agent):
 
     def __init__(
         self,
@@ -224,7 +224,7 @@ class ApeXDQNAgent(Agent):
         }
 
 
-class ApeXDQNAgentFactory(AgentFactory):
+class ApexDQNAgentFactory(AgentFactory):
 
     def __init__(
         self,
@@ -264,7 +264,7 @@ class ApeXDQNAgentFactory(AgentFactory):
         eps = self._eps_func(index)
         replay_buffer = self._make_arg(self._replay_buffer, index)
         controller = self._make_arg(self._controller, index)
-        return ApeXDQNAgent(
+        return ApexDQNAgent(
             model,
             eps,
             replay_buffer,
