@@ -120,6 +120,9 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
         self._max_priority = 1.0
 
+        self._timestamps = np.full(capacity, -1, dtype=np.int64)
+        self._current_timestamp = 0
+
     def __getitem__(
         self, index: Union[int, Tensor]
     ) -> Tuple[NestedTensor, Union[float, torch.Tensor]]:
@@ -147,6 +150,10 @@ class PrioritizedReplayBuffer(ReplayBuffer):
     def max_priority(self) -> float:
         return self._max_priority
 
+    @property
+    def current_timestamp(self) -> int:
+        return self._current_timestamp
+
     @remote.remote_method(batch_size=None)
     def append(self,
                data: NestedTensor,
@@ -161,15 +168,18 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
     @remote.remote_method(batch_size=None)
     def sample(
-            self,
-            batch_size: int) -> Tuple[NestedTensor, torch.Tensor, torch.Tensor]:
-        data, weight, index = self._sample(batch_size)
-        return data, weight, torch.from_numpy(index)
+        self, batch_size: int
+    ) -> Tuple[NestedTensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        data, weight, index, timestamp = self._sample(batch_size)
+        return data, weight, torch.from_numpy(index), torch.from_numpy(
+            timestamp)
 
     @remote.remote_method(batch_size=None)
-    def update_priority(self, index: Union[int, Tensor],
-                        priority: Union[float, Tensor]) -> None:
-        self._update_priority(index, priority)
+    def update_priority(self,
+                        index: Union[int, Tensor],
+                        priority: Union[float, Tensor],
+                        timestamp: Optional[Union[int, Tensor]] = None) -> None:
+        self._update_priority(index, priority, timestamp)
 
     def warm_up(self, learning_starts: Optional[int] = None) -> None:
         capacity = self.get_capacity()
@@ -189,8 +199,22 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         self._sum_tree[index] = priority
         self._min_tree[index] = priority
 
-    def _update_priority(self, index: Union[int, Tensor],
-                         priority: Union[float, Tensor]) -> None:
+    def _update_priority(
+            self,
+            index: Union[int, Tensor],
+            priority: Union[float, Tensor],
+            timestamp: Optional[Union[int, Tensor]] = None) -> None:
+        if timestamp is not None:
+            timestamp = data_utils.to_numpy(timestamp)
+            cur_timestamp = self._timestamps[index]
+            mask = (timestamp == cur_timestamp)
+            if isinstance(index, int):
+                if not mask:
+                    return
+            else:
+                index = index[mask]
+                priority = priority[mask]
+
         priority += self.eps
         if isinstance(priority, float):
             self._max_priority = max(self._max_priority, priority)
@@ -206,6 +230,10 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
         self._sum_tree[index] = priority
         self._min_tree[index] = priority
+
+    def _update_timestamp(self, index: Union[int, Tensor]) -> None:
+        self._timestamps[index] = self._current_timestamp
+        self._current_timestamp += 1
 
     def _compute_weight(
             self, index: Union[int, Tensor]) -> Union[float, torch.Tensor]:
@@ -231,6 +259,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             self._init_priority(index)
         else:
             self._update_priority(index, priority)
+        self._update_timestamp(index)
         return index
 
     def _extend(self,
@@ -241,17 +270,19 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             self._init_priority(index)
         else:
             self._update_priority(index, priority)
+        self._update_timestamp(index)
         return index
 
     def _sample(
-            self,
-            batch_size: int) -> Tuple[NestedTensor, torch.Tensor, np.ndarray]:
+        self, batch_size: int
+    ) -> Tuple[NestedTensor, torch.Tensor, np.ndarray, np.ndarray]:
         p_sum = self._sum_tree.query(0, self.capacity)
         mass = np.random.uniform(0.0, p_sum,
                                  size=batch_size).astype(self.priority_type)
         index = self._sum_tree.scan_lower_bound(mass)
         data, weight = self.__getitem__(index)
-        return data, weight, index
+        timestamp = self._timestamps[index]
+        return data, weight, index, timestamp
 
 
 class RemoteReplayBuffer(remote.Remote):
@@ -270,8 +301,8 @@ class RemoteReplayBuffer(remote.Remote):
         self._server_addr = server_addr
 
     def __repr__(self):
-        return f"RemoteReplayBuffer(server_name={self._server_name}, " + \
-                f"server_addr={self._server_addr})"
+        return (f"RemoteReplayBuffer(server_name={self._server_name}, " +
+                f"server_addr={self._server_addr})")
 
     @property
     def prefetch(self) -> Optional[int]:

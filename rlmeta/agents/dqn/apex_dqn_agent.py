@@ -134,9 +134,10 @@ class ApeXDQNAgent(Agent):
         console.log(f"Training for num_steps = {num_steps}")
         for step in track(range(num_steps), description="Training..."):
             t0 = time.perf_counter()
-            batch, weight, index = self.replay_buffer.sample(self.batch_size)
+            batch, weight, index, timestamp = self.replay_buffer.sample(
+                self.batch_size)
             t1 = time.perf_counter()
-            step_stats = self.train_step(batch, weight, index)
+            step_stats = self.train_step(batch, weight, index, timestamp)
             t2 = time.perf_counter()
             time_stats = {
                 "sample_data_time/ms": (t1 - t0) * 1000.0,
@@ -197,7 +198,8 @@ class ApeXDQNAgent(Agent):
         return replay
 
     def train_step(self, batch: NestedTensor, weight: torch.Tensor,
-                   index: torch.Tensor) -> Dict[str, float]:
+                   index: torch.Tensor,
+                   timestamp: torch.Tensor) -> Dict[str, float]:
         device = next(self.model.parameters()).device
         # batch = nested_utils.map_nested(lambda x: x.to(device), batch)
         self.optimizer.zero_grad()
@@ -213,7 +215,7 @@ class ApeXDQNAgent(Agent):
                                                    self.grad_clip)
         self.optimizer.step()
         priority = td_err.detach().abs().cpu()
-        self.replay_buffer.update_priority(index, priority)
+        self.replay_buffer.update_priority(index, priority, timestamp)
 
         return {
             "reward": batch["reward"].detach().mean().item(),
