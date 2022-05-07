@@ -201,11 +201,11 @@ class ApeXDQNAgent(Agent):
                    index: torch.Tensor,
                    timestamp: torch.Tensor) -> Dict[str, float]:
         device = next(self.model.parameters()).device
-        # batch = nested_utils.map_nested(lambda x: x.to(device), batch)
+        batch = nested_utils.map_nested(lambda x: x.to(device), batch)
         self.optimizer.zero_grad()
 
         td_err = self.model.td_error(
-            batch, torch.tensor([self.gamma**self.multi_step]))
+            batch, torch.tensor([self.gamma**self.multi_step], device=device))
         weight = weight.to(device)  # size = (batch_size)
         loss = td_err.square() * weight * 0.5
         loss = loss.mean()

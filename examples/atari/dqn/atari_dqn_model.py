@@ -12,6 +12,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import rlmeta.core.remote as remote
+import rlmeta_extension.nested_utils as nested_utils
 
 from examples.atari.backbone import AtariBackbone
 from rlmeta.agents.dqn.dqn_model import DQNModel
@@ -84,13 +85,11 @@ class AtariDQNModel(DQNModel):
 
     def td_error(self, batch: NestedTensor,
                  gamma: torch.Tensor) -> torch.Tensor:
-        device = next(self.parameters()).device
-        obs = batch["obs"].to(device)
-        action = batch["action"].to(device)
-        reward = batch["reward"].to(device)
-        next_obs = batch["next_obs"].to(device)
-        done = batch["done"].to(device)
-        gamma = gamma.to(device)
+        obs = batch["obs"]
+        action = batch["action"]
+        reward = batch["reward"]
+        next_obs = batch["next_obs"]
+        done = batch["done"]
 
         q = self.online_net(obs)
         q = q.gather(dim=-1, index=action)
@@ -115,6 +114,9 @@ class AtariDQNModel(DQNModel):
     @remote.remote_method(batch_size=None)
     def compute_priority(self, batch: NestedTensor,
                          gamma: torch.Tensor) -> torch.Tensor:
+        device = next(self.parameters()).device
+        batch = nested_utils.map_nested(lambda x: x.to(device), batch)
+        gamma = gamma.to(device)
         err = self.td_error(batch, gamma)
         return err.abs().cpu()
 
