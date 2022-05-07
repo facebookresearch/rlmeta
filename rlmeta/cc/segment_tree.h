@@ -392,11 +392,11 @@ void DefineMinSegmentTree(const std::string& type, py::module& m) {
   py::class_<MinSegmentTree<T>, std::shared_ptr<MinSegmentTree<T>>>(
       m, pyclass.c_str())
       .def(py::init<int64_t>())
-      .def("__len__", &MinSegmentTree<T>::size)
       .def_property_readonly("size", &MinSegmentTree<T>::size)
       .def_property_readonly("capacity", &MinSegmentTree<T>::capacity)
       .def_property_readonly("identity_element",
                              &MinSegmentTree<T>::identity_element)
+      .def("__len__", &MinSegmentTree<T>::size)
       .def("__getitem__",
            py::overload_cast<int64_t>(&MinSegmentTree<T>::At, py::const_))
       .def("__getitem__", py::overload_cast<const py::array_t<int64_t>&>(

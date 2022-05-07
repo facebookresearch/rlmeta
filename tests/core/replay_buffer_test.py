@@ -146,8 +146,8 @@ class PrioritizedReplayBufferTest(TestCaseBase):
                                      -self.beta)
         expected_max_weight = weight.max()
         replay_buffer.update_priority(index, weight)
-        _, current_weights = replay_buffer[index]
-        self.assert_tensor_close(current_weights, expected_weights, self.rtol,
+        _, cur_weights = replay_buffer[index]
+        self.assert_tensor_close(cur_weights, expected_weights, self.rtol,
                                  self.atol)
         self.assertAlmostEqual(replay_buffer.max_priority,
                                expected_max_weight,
@@ -167,9 +167,9 @@ class PrioritizedReplayBufferTest(TestCaseBase):
             -self.beta)
 
         replay_buffer.update_priority(index, weight)
-        _, current_weight, current_index = replay_buffer._sample(
+        _, cur_weight, cur_index, cur_timestamp = replay_buffer.sample(
             self.batch_size)
-        self.assert_tensor_close(current_weight, expected_weight[current_index],
+        self.assert_tensor_close(cur_weight, expected_weight[cur_index],
                                  self.rtol, self.atol)
 
 
