@@ -16,7 +16,7 @@ import rlmeta_extension.nested_utils as nested_utils
 from rlmeta.core.types import Tensor, NestedTensor
 
 _NUMPY_DTYPE_TO_TORCH_MAP = {
-    np.bool: torch.bool,
+    bool: torch.bool,
     np.uint8: torch.uint8,
     np.int8: torch.int8,
     np.int16: torch.int16,
@@ -30,7 +30,7 @@ _NUMPY_DTYPE_TO_TORCH_MAP = {
 }
 
 _TORCH_DTYPE_TO_NUMPY_MAP = {
-    torch.bool: np.bool,
+    torch.bool: bool,
     torch.uint8: np.uint8,
     torch.int8: np.int8,
     torch.int16: np.int16,

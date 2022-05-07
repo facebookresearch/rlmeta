@@ -27,7 +27,7 @@ from rlmeta.utils.stats_dict import StatsDict
 console = Console()
 
 
-class ApeXDQNAgent(Agent):
+class ApexDQNAgent(Agent):
 
     def __init__(
         self,
@@ -201,11 +201,11 @@ class ApeXDQNAgent(Agent):
                    index: torch.Tensor,
                    timestamp: torch.Tensor) -> Dict[str, float]:
         device = next(self.model.parameters()).device
-        # batch = nested_utils.map_nested(lambda x: x.to(device), batch)
+        batch = nested_utils.map_nested(lambda x: x.to(device), batch)
         self.optimizer.zero_grad()
 
         td_err = self.model.td_error(
-            batch, torch.tensor([self.gamma**self.multi_step]))
+            batch, torch.tensor([self.gamma**self.multi_step], device=device))
         weight = weight.to(device)  # size = (batch_size)
         loss = td_err.square() * weight * 0.5
         loss = loss.mean()
@@ -224,7 +224,7 @@ class ApeXDQNAgent(Agent):
         }
 
 
-class ApeXDQNAgentFactory(AgentFactory):
+class ApexDQNAgentFactory(AgentFactory):
 
     def __init__(
         self,
@@ -264,7 +264,7 @@ class ApeXDQNAgentFactory(AgentFactory):
         eps = self._eps_func(index)
         replay_buffer = self._make_arg(self._replay_buffer, index)
         controller = self._make_arg(self._controller, index)
-        return ApeXDQNAgent(
+        return ApexDQNAgent(
             model,
             eps,
             replay_buffer,

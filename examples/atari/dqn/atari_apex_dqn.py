@@ -18,7 +18,7 @@ import rlmeta.utils.hydra_utils as hydra_utils
 import rlmeta.utils.remote_utils as remote_utils
 
 from examples.atari.dqn.atari_dqn_model import AtariDQNModel
-from rlmeta.agents.dqn.apex_dqn_agent import ApeXDQNAgent, ApeXDQNAgentFactory
+from rlmeta.agents.dqn.apex_dqn_agent import ApexDQNAgent, ApexDQNAgentFactory
 from rlmeta.agents.dqn.apex_dqn_agent import ConstantEpsFunc, FlexibleEpsFunc
 from rlmeta.core.controller import Phase, Controller
 from rlmeta.core.loop import LoopList, ParallelLoop
@@ -66,7 +66,7 @@ def main(cfg):
     env_fac = gym_wrappers.AtariWrapperFactory(
         cfg.env, max_episode_steps=cfg.max_episode_steps)
 
-    agent = ApeXDQNAgent(a_model,
+    agent = ApexDQNAgent(a_model,
                          replay_buffer=a_rb,
                          controller=a_ctrl,
                          optimizer=optimizer,
@@ -75,11 +75,11 @@ def main(cfg):
                          learning_starts=cfg.get("learning_starts", None),
                          sync_every_n_steps=cfg.sync_every_n_steps,
                          push_every_n_steps=cfg.push_every_n_steps)
-    t_agent_fac = ApeXDQNAgentFactory(t_model,
+    t_agent_fac = ApexDQNAgentFactory(t_model,
                                       FlexibleEpsFunc(cfg.train_eps,
                                                       cfg.num_train_rollouts),
                                       replay_buffer=t_rb)
-    e_agent_fac = ApeXDQNAgentFactory(e_model, ConstantEpsFunc(cfg.eval_eps))
+    e_agent_fac = ApexDQNAgentFactory(e_model, ConstantEpsFunc(cfg.eval_eps))
 
     t_loop = ParallelLoop(env_fac,
                           t_agent_fac,
