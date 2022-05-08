@@ -12,7 +12,7 @@ import torch.nn.functional as F
 import rlmeta.core.remote as remote
 
 from examples.atari.backbone import AtariBackbone
-from rlmeta.agents.ppo.ppo_model import PPOModel
+from rlmeta.agents.ppo import PPOModel
 
 
 class AtariPPOModel(PPOModel):

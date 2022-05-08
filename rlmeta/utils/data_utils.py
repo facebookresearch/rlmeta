@@ -11,7 +11,7 @@ from typing import Any, Dict, Sequence, Tuple, Union
 import numpy as np
 import torch
 
-import rlmeta_extension.nested_utils as nested_utils
+import rlmeta.utils.nested_utils as nested_utils
 
 from rlmeta.core.types import Tensor, NestedTensor
 

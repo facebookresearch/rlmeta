@@ -12,7 +12,7 @@ import torch.nn.functional as F
 import rlmeta.core.remote as remote
 
 from examples.atari.backbone import AtariBackbone
-from rlmeta.agents.ppo.ppo_rnd_model import PPORNDModel
+from rlmeta.agents.ppo import PPORNDModel
 from rlmeta.core.rescalers import MomentsRescaler
 from rlmeta.core.types import NestedTensor
 

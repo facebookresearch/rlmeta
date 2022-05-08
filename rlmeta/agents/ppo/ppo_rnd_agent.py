@@ -8,8 +8,8 @@ from typing import Callable, Dict, List, Optional, Sequence
 import torch
 import torch.nn as nn
 
-import rlmeta_extension.nested_utils as nested_utils
 import rlmeta.utils.data_utils as data_utils
+import rlmeta.utils.nested_utils as nested_utils
 
 from rlmeta.agents.ppo.ppo_agent import PPOAgent
 from rlmeta.core.controller import ControllerLike

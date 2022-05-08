@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 
 import rlmeta.core.remote as remote
-import rlmeta_extension.nested_utils as nested_utils
+import rlmeta.utils.nested_utils as nested_utils
 
 from rlmeta.core.server import Server
 

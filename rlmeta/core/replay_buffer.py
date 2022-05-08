@@ -14,13 +14,13 @@ import torch
 
 import rlmeta.core.remote as remote
 import rlmeta.utils.data_utils as data_utils
-import rlmeta_extension.nested_utils as nested_utils
+import rlmeta.utils.nested_utils as nested_utils
 
 from rlmeta.core.launchable import Launchable
-from rlmeta.core.segment_tree import SumSegmentTree, MinSegmentTree
 from rlmeta.core.server import Server
 from rlmeta.core.types import Tensor, NestedTensor
-from rlmeta_extension import CircularBuffer
+from rlmeta.data import CircularBuffer
+from rlmeta.data import SumSegmentTree, MinSegmentTree
 
 console = Console()
 
