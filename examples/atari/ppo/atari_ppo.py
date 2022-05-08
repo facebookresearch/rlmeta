@@ -20,7 +20,7 @@ import rlmeta.utils.remote_utils as remote_utils
 
 from examples.atari.ppo.atari_ppo_model import AtariPPOModel
 from rlmeta.agents.agent import AgentFactory
-from rlmeta.agents.ppo.ppo_agent import PPOAgent
+from rlmeta.agents.ppo import PPOAgent
 from rlmeta.core.controller import Phase, Controller
 from rlmeta.core.loop import LoopList, ParallelLoop
 from rlmeta.core.model import wrap_downstream_model

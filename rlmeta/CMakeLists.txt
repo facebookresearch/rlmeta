@@ -49,11 +49,11 @@ add_subdirectory(
 )
 
 pybind11_add_module(
-  rlmeta_extension
+  _rlmeta_extension
   ${CMAKE_CURRENT_SOURCE_DIR}/cc/pybind.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/cc/circular_buffer.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/cc/nested_utils.cc
 )
 target_include_directories(
-  rlmeta_extension PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
-target_link_libraries(rlmeta_extension PUBLIC torch ${TORCH_PYTHON_LIBRARIES})
+  _rlmeta_extension PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
+target_link_libraries(_rlmeta_extension PUBLIC torch ${TORCH_PYTHON_LIBRARIES})

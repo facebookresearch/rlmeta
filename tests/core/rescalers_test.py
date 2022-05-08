@@ -29,10 +29,7 @@ class RescalerTest(TestCaseBase):
 
         x = torch.rand(*self.size)
         y = rms_rescaler.rescale(x)
-        if batch_size == 1:
-            y_expected = x
-        else:
-            y_expected = x / data.square().mean(dim=0).sqrt()
+        y_expected = x / data.square().mean(dim=0).sqrt()
         self.assert_tensor_close(y, y_expected, rtol=self.rtol, atol=self.atol)
         self.assert_tensor_close(rms_rescaler.recover(y),
                                  x,

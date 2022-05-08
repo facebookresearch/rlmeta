@@ -12,10 +12,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import rlmeta.core.remote as remote
-import rlmeta_extension.nested_utils as nested_utils
+import rlmeta.utils.nested_utils as nested_utils
 
 from examples.atari.backbone import AtariBackbone
-from rlmeta.agents.dqn.dqn_model import DQNModel
+from rlmeta.agents.dqn import DQNModel
 from rlmeta.core.rescalers import SqrtRescaler
 from rlmeta.core.types import NestedTensor
 

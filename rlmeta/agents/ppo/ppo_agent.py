@@ -13,8 +13,8 @@ import torch.nn as nn
 from rich.console import Console
 from rich.progress import track
 
-import rlmeta_extension.nested_utils as nested_utils
 import rlmeta.utils.data_utils as data_utils
+import rlmeta.utils.nested_utils as nested_utils
 
 from rlmeta.agents.agent import Agent
 from rlmeta.core.controller import Controller, ControllerLike, Phase

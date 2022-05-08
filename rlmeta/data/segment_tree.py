@@ -8,8 +8,8 @@ from typing import Union
 import numpy as np
 import torch
 
-from rlmeta_extension import SumSegmentTreeFp32, SumSegmentTreeFp64
-from rlmeta_extension import MinSegmentTreeFp32, MinSegmentTreeFp64
+from _rlmeta_extension import (SumSegmentTreeFp32, SumSegmentTreeFp64,
+                               MinSegmentTreeFp32, MinSegmentTreeFp64)
 
 SegmentTreeImpl = Union[SumSegmentTreeFp32, SumSegmentTreeFp64,
                         MinSegmentTreeFp32, MinSegmentTreeFp64]

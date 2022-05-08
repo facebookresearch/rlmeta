@@ -18,8 +18,8 @@ import rlmeta.utils.hydra_utils as hydra_utils
 import rlmeta.utils.remote_utils as remote_utils
 
 from examples.atari.dqn.atari_dqn_model import AtariDQNModel
-from rlmeta.agents.dqn.apex_dqn_agent import ApexDQNAgent, ApexDQNAgentFactory
-from rlmeta.agents.dqn.apex_dqn_agent import ConstantEpsFunc, FlexibleEpsFunc
+from rlmeta.agents.dqn import (ApexDQNAgent, ApexDQNAgentFactory,
+                               ConstantEpsFunc, FlexibleEpsFunc)
 from rlmeta.core.controller import Phase, Controller
 from rlmeta.core.loop import LoopList, ParallelLoop
 from rlmeta.core.model import wrap_downstream_model

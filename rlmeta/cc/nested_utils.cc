@@ -202,7 +202,7 @@ py::tuple UnbatchNested(std::function<py::tuple(const py::object&)> func,
 
 void DefineNestedUtils(py::module& m) {
   py::module sub =
-      m.def_submodule("nested_utils", "A submodule of 'rlmeta_extension'");
+      m.def_submodule("nested_utils", "A submodule of \"_rlmeta_extension\"");
 
   sub.def("flatten_nested", &nested_utils::FlattenNested)
       .def("map_nested", &nested_utils::MapNested)

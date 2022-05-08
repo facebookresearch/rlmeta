@@ -11,7 +11,7 @@ from math import prod
 import numpy as np
 import torch
 
-from rlmeta.core.segment_tree import SumSegmentTree, MinSegmentTree
+from rlmeta.data import SumSegmentTree, MinSegmentTree
 from tests.test_utils import TestCaseBase
 
 
