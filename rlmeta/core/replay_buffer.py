@@ -310,7 +310,8 @@ class RemoteReplayBuffer(remote.Remote):
 
     def sample(
         self, batch_size: int
-    ) -> Union[NestedTensor, Tuple[NestedTensor, torch.Tensor]]:
+    ) -> Union[NestedTensor, Tuple[NestedTensor, torch.Tensor, torch.Tensor,
+                                   torch.Tensor]]:
         if len(self._futures) > 0:
             ret = self._futures.popleft().result()
         else:
@@ -328,7 +329,8 @@ class RemoteReplayBuffer(remote.Remote):
 
     async def async_sample(
         self, batch_size: int
-    ) -> Union[NestedTensor, Tuple[NestedTensor, torch.Tensor]]:
+    ) -> Union[NestedTensor, Tuple[NestedTensor, torch.Tensor, torch.Tensor,
+                                   torch.Tensor]]:
         if len(self._futures) > 0:
             ret = await self._futures.popleft()
         else:
