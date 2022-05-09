@@ -206,7 +206,8 @@ class ApexDQNAgent(Agent):
 
         td_err = self.model.td_error(
             batch, torch.tensor([self.gamma**self.multi_step], device=device))
-        weight = weight.to(device)  # size = (batch_size)
+        weight = weight.to(device=device,
+                           dtype=td_err.dtype)  # size = (batch_size)
         loss = td_err.square() * weight * 0.5
         loss = loss.mean()
 
