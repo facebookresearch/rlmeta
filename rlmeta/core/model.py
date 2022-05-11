@@ -31,6 +31,10 @@ class RemotableModel(nn.Module, remote.Remotable):
 
     @remote.remote_method(batch_size=None)
     def push(self, state_dict: Dict[str, torch.Tensor]) -> None:
+        # Move state_dict to device before loading.
+        # https://github.com/pytorch/pytorch/issues/34880
+        device = next(self.parameters()).device
+        state_dict = nested_utils.map_nested(lambda x: x.to(device), state_dict)
         self.load_state_dict(state_dict)
 
 
