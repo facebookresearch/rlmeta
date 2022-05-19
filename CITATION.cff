@@ -5,14 +5,14 @@ authors:
   given-names: "Xiaomeng"
 - family-names: "Cui"
   given-names: "Brandon"
-- family-names: "Tian"
-  given-names: "Yuandong"
 - family-names: "Li"
   given-names: "Teng"
 - family-names: "Rodriguez"
   given-names: "Pedro"
 - family-names: "Ghosh"
   given-names: "Gargi"
+- family-names: "Tian"
+  given-names: "Yuandong"
 title: "RLMeta: A Flexible Framework for Distributed Reinforcement Learning"
 version: 0.1
 date-released: 2022-01-05
