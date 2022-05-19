@@ -14,7 +14,6 @@ authors:
 - family-names: "Tian"
   given-names: "Yuandong"
 title: "RLMeta: A Flexible Framework for Distributed Reinforcement Learning"
-version: 0.1
 date-released: 2022-01-05
 url: "https://github.com/facebookresearch/rlmeta"
 
