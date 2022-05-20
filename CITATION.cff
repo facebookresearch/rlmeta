@@ -7,13 +7,9 @@ authors:
   given-names: "Brandon"
 - family-names: "Li"
   given-names: "Teng"
-- family-names: "Rodriguez"
-  given-names: "Pedro"
-- family-names: "Ghosh"
-  given-names: "Gargi"
 - family-names: "Tian"
   given-names: "Yuandong"
 title: "RLMeta: A Flexible Framework for Distributed Reinforcement Learning"
-year-released: 2022
+date-released: 2022-01-05
 url: "https://github.com/facebookresearch/rlmeta"
 
