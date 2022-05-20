@@ -373,17 +373,12 @@ void DefineSumSegmentTree(const std::string& type, py::module& m) {
       .def("scan_lower_bound",
            py::overload_cast<const torch::Tensor&>(
                &SumSegmentTree<T>::ScanLowerBound, py::const_))
-      .def(py::pickle(
-          [](const SumSegmentTree<T>& s) {
-            return py::make_tuple(s.DumpValues());
-          },
-          [](const py::tuple& t) {
-            assert(t.size() == 1);
-            const py::array_t<T>& arr = t[0].cast<py::array_t<T>>();
-            SumSegmentTree<T> s(arr.size());
-            s.LoadValues(arr);
-            return s;
-          }));
+      .def(py::pickle([](const SumSegmentTree<T>& s) { return s.DumpValues(); },
+                      [](const py::array_t<T>& arr) {
+                        SumSegmentTree<T> s(arr.size());
+                        s.LoadValues(arr);
+                        return s;
+                      }));
 }
 
 template <typename T>
@@ -443,17 +438,12 @@ void DefineMinSegmentTree(const std::string& type, py::module& m) {
       .def("query",
            py::overload_cast<const torch::Tensor&, const torch::Tensor&>(
                &MinSegmentTree<T>::Query, py::const_))
-      .def(py::pickle(
-          [](const MinSegmentTree<T>& s) {
-            return py::make_tuple(s.DumpValues());
-          },
-          [](const py::tuple& t) {
-            assert(t.size() == 1);
-            const py::array_t<T>& arr = t[0].cast<py::array_t<T>>();
-            MinSegmentTree<T> s(arr.size());
-            s.LoadValues(arr);
-            return s;
-          }));
+      .def(py::pickle([](const MinSegmentTree<T>& s) { return s.DumpValues(); },
+                      [](const py::array_t<T>& arr) {
+                        MinSegmentTree<T> s(arr.size());
+                        s.LoadValues(arr);
+                        return s;
+                      }));
 }
 
 }  // namespace rlmeta
