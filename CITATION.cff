@@ -1,0 +1,14 @@
+cff-version: 1.2.0
+message: "If you find RLMeta useful, please cite it as below."
+authors:
+- family-names: "Yang"
+  given-names: "Xiaomeng"
+- family-names: "Cui"
+  given-names: "Brandon"
+- family-names: "Li"
+  given-names: "Teng"
+- family-names: "Tian"
+  given-names: "Yuandong"
+title: "RLMeta: A Flexible Framework for Distributed Reinforcement Learning"
+date-released: 2022-01-05
+url: "https://github.com/facebookresearch/rlmeta"
