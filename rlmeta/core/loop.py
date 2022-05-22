@@ -178,8 +178,12 @@ class AsyncLoop(Loop, Launchable):
                 await self._controller.async_add_episode(
                     self._running_phase, stats)
 
-    # Similar loop as DeepMind's Acme
-    # https://github.com/deepmind/acme/blob/master/acme/environment_loop.py#L68
+    # The method _run_episode is adapted from Acme's Enviroment.run_episode:
+    # https://github.com/deepmind/acme/blob/df961057bcd2e1436d5f894ebced62d694225034/acme/environment_loop.py#L76
+    #
+    # It was released under the Apache License, Version 2.0 (the "License"),
+    # available at:
+    # http://www.apache.org/licenses/LICENSE-2.0
     async def _run_episode(
         self,
         index: int,
