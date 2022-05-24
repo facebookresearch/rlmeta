@@ -25,9 +25,11 @@ namespace rlmeta {
 
 // SegmentTree is a tree data structure to maintain statistics of intervals.
 // https://en.wikipedia.org/wiki/Segment_tree
+//
 // Here is the implementaion of non-recursive SegmentTree for single point
 // update and interval query. The time complexities of both Update and Query are
 // O(logN).
+//
 // One example of a SegmentTree is shown below.
 //
 //                          1: [0, 8)
@@ -37,6 +39,9 @@ namespace rlmeta {
 //     4: [0, 2)      5: [2, 4)      6: [4, 6)      7: [6, 8)
 //     /     \        /      \        /     \        /      \
 //   8: 0   9: 1   10: 2   11: 3   12: 4   13: 5   14: 6   15: 7
+//
+// The implementaion is adapted from the link below.
+// https://codeforces.com/blog/entry/18051
 
 template <typename T, class Operator>
 class SegmentTree {
