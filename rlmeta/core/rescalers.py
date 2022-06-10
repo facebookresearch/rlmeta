@@ -31,7 +31,7 @@ class Rescaler(nn.Module, abc.ABC):
         """
 
 
-class PassthroughRescaler(Rescaler):
+class IdentityRescaler(Rescaler):
 
     def rescale(self, x: torch.Tensor) -> torch.Tensor:
         return x
