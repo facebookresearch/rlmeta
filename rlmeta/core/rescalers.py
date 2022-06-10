@@ -31,6 +31,15 @@ class Rescaler(nn.Module, abc.ABC):
         """
 
 
+class PassthroughRescaler(Rescaler):
+
+    def rescale(self, x: torch.Tensor) -> torch.Tensor:
+        return x
+
+    def recover(self, x: torch.Tensor) -> torch.Tensor:
+        return x
+
+
 class RMSRescaler(Rescaler):
 
     def __init__(self, size: Union[int, Tuple[int]]) -> None:
