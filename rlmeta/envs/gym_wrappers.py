@@ -96,6 +96,37 @@ class GymWrapper(Env):
     def seed(self, seed: Optional[int] = None) -> None:
         self._env.seed(seed)
 
+class MAGymWrapper(GymWrapper):
+    def __init__(
+            self,
+            env: gym.Env,
+            observation_fn: Optional[Callable[..., Tensor]] = None) -> None:
+        super(MAGymWrapper, self).__init__(env)
+    
+    def reset(self, *args, **kwargs) -> TimeStep:
+        obs = self._env.reset(*args, **kwargs)
+        timestep = {}
+        for k,v in obs.items():
+            obs[k] = self._observation_fn(obs[k])
+            timestep[k] = TimeStep(obs[k], done=False)
+        return timestep
+
+    def step(self, action: Action) -> TimeStep: #TODO check action type
+        #act = action.action
+        #if not isinstance(act, int):
+        #    act = act.item()
+        act = {}
+        for k,v, in action.items():
+            act[k] = v.action
+            if not isinstance(act[k], int):
+                act[k] = act[k].item()
+
+        obs, reward, done, info = self._env.step(act)
+        timestep = {}
+        for k,v in obs.items():
+            obs[k] = self._observation_fn(obs[k])
+            timestep[k]=TimeStep(obs[k], reward[k], done[k], info[k])
+        return timestep
 
 class AtariWrapperFactory(EnvFactory):
 
