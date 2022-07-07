@@ -73,12 +73,10 @@ class ApexDQNAgent(Agent):
             self.collate_fn = data_utils.stack_tensors
 
         self.trajectory = []
+        self.step_counter = 0
 
-    def connect(self) -> None:
-        super().connect()
-        if self._additional_models_to_update is not None:
-            for m in self._additional_models_to_update:
-                m.connect()
+    def reset(self) -> None:
+        self.step_counter = 0
 
     def act(self, timestep: TimeStep) -> Action:
         obs = timestep.observation
@@ -125,6 +123,12 @@ class ApexDQNAgent(Agent):
             await self.replay_buffer.async_extend(replay, priority)
         self.trajectory = []
 
+    def connect(self) -> None:
+        super().connect()
+        if self._additional_models_to_update is not None:
+            for m in self._additional_models_to_update:
+                m.connect()
+
     def train(self, num_steps: int) -> Optional[StatsDict]:
         self.controller.set_phase(Phase.TRAIN, reset=True)
 
@@ -132,7 +136,7 @@ class ApexDQNAgent(Agent):
         stats = StatsDict()
 
         console.log(f"Training for num_steps = {num_steps}")
-        for step in track(range(num_steps), description="Training..."):
+        for _ in track(range(num_steps), description="Training..."):
             t0 = time.perf_counter()
             batch, weight, index, timestamp = self.replay_buffer.sample(
                 self.batch_size)
@@ -146,13 +150,14 @@ class ApexDQNAgent(Agent):
             stats.extend(step_stats)
             stats.extend(time_stats)
 
-            if step % self.sync_every_n_steps == self.sync_every_n_steps - 1:
+            self.step_counter += 1
+            if self.step_counter % self.sync_every_n_steps == 0:
                 self.model.sync_target_net()
                 if self._additional_models_to_update is not None:
                     for m in self._additional_models_to_update:
                         m.sync_target_net()
 
-            if step % self.push_every_n_steps == self.push_every_n_steps - 1:
+            if self.step_counter % self.push_every_n_steps == 0:
                 self.model.push()
                 if self._additional_models_to_update is not None:
                     for m in self._additional_models_to_update:

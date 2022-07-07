@@ -19,6 +19,9 @@ from rlmeta.utils.stats_dict import StatsDict
 
 class Agent(abc.ABC):
 
+    def reset(self) -> None:
+        pass
+
     def act(self, timestep: TimeStep) -> Action:
         """
         Act function.
