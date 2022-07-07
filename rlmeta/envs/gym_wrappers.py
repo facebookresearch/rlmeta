@@ -112,9 +112,6 @@ class MAGymWrapper(GymWrapper):
         return timestep
 
     def step(self, action: Action) -> TimeStep: #TODO check action type
-        #act = action.action
-        #if not isinstance(act, int):
-        #    act = act.item()
         act = {}
         for k,v, in action.items():
             act[k] = v.action
