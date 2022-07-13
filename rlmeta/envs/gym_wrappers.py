@@ -102,15 +102,21 @@ class MAGymWrapper(GymWrapper):
             env: gym.Env,
             observation_fn: Optional[Callable[..., Tensor]] = None) -> None:
         super(MAGymWrapper, self).__init__(env)
+        self._action_mask = self._env.action_mask
     
+    @property
+    def action_mask(self):
+        return self._action_mask
+
     def reset(self, *args, **kwargs) -> TimeStep:
         obs = self._env.reset(*args, **kwargs)
+        self._action_mask = self._env.action_mask
         timestep = {}
         for k,v in obs.items():
             obs[k] = self._observation_fn(obs[k])
             timestep[k] = TimeStep(obs[k], done=False)
         return timestep
-
+    
     def step(self, action: Action) -> TimeStep: #TODO check action type
         act = {}
         for k,v, in action.items():

@@ -118,14 +118,6 @@ class MAAsyncLoop(MALoop, Launchable):
             self._envs.append(env)
 
         for i in range(self._num_rollouts):
-            # TODO change to nested expression
-            '''
-            agent = self._agent_factory(self.index_offset + i)
-            agent.connect()
-            # if self.seed is not None:
-            #     agent.seed(self.seed + self.index_offset + i)
-            self._agents.append(agent)
-            '''
             agents = {}
             for k,v in self._agent_factory.items():
                 agents[k] = v(self.index_offset + i)
@@ -196,55 +188,63 @@ class MAAsyncLoop(MALoop, Launchable):
         self,
         index: int,
         env: Env,
-        agent: Agent, #TODO type check
+        agent: Agent, #TODO:type check
         episode_callbacks: Optional[EpisodeCallbacks] = None
     ) -> Optional[Dict[str, float]]:
-
-        episode_length = 0
-        episode_return = 0.0
+        
+        episode_length, episode_return = {}, {}
+        for k,v in agent.items():
+            episode_length[k] = 0
+            episode_return[k] = 0.0
         start_time = time.perf_counter()
         if episode_callbacks is not None:
             episode_callbacks.reset()
             episode_callbacks.on_episode_start(index)
 
         timestep = env.reset()
-        # TODO:Process timestep or keep timestep a dictionary instead of a tuple
         for k,v in agent.items():
-            await agent[k].async_observe_init(timestep[k])
+            if env.action_mask[k]:
+                await agent[k].async_observe_init(timestep[k])
         if episode_callbacks is not None:
             episode_callbacks.on_episode_init(index, timestep)
 
-        while not timestep["opponent"].done: #TODO fix the hard-code
+        while not timestep["attacker"].done: #TODO fix the hard-code
             if not self.running:
                 return None
-            #action = await agent.async_act(timestep)
             action = {}
             for k,v in agent.items():
                 action[k] = await v.async_act(timestep[k])
             timestep = env.step(action)
+            
             for k,v in agent.items():
-                await v.async_observe(action[k], timestep[k])
+                if env.action_mask[k]:
+                    await v.async_observe(action[k], timestep[k])
             if self.should_update:
                 for k,v in agent.items():
-                    await agent[k].async_update()
+                    if env.action_mask[k]:
+                        await agent[k].async_update()
 
-            episode_length += 1
-            episode_return += timestep["opponent"].reward #TODO fix the hard-coded
+            for k, v in agent.items():
+                episode_length[k] += 1
+                episode_return[k] += timestep[k].reward
             if episode_callbacks is not None:
-                episode_callbacks.on_episode_step(index, episode_length - 1,
-                                                  action, timestep["opponent"]) #TODO fix the hard-coded
+                episode_callbacks.on_episode_step(index, episode_length['attacker'] - 1,# TODO fix the hardcode
+                                                  action, timestep)
 
         episode_time = time.perf_counter() - start_time
-        steps_per_second = episode_length / episode_time
+        steps_per_second = episode_length['attacker'] / episode_time #TODO fix the hardcode
         if episode_callbacks is not None:
             episode_callbacks.on_episode_end(index)
 
         metrics = {
-            "episode_length": float(episode_length),
-            "episode_return": episode_return,
+            #"episode_length": float(episode_length),
+            #"episode_return": episode_return,
             "episode_time/s": episode_time,
             "steps_per_second": steps_per_second,
         }
+        for k,v in agent.items():
+            metrics.update({k+"_episode_length": float(episode_length[k])})
+            metrics.update({k+"_episode_return": episode_return[k]})
         if episode_callbacks is not None:
             metrics.update(episode_callbacks.custom_metrics)
 
@@ -255,7 +255,7 @@ class MAParallelLoop(MALoop):
 
     def __init__(self,
                  env_factory: EnvFactory,
-                 agent_factory: AgentFactory,#TODO
+                 agent_factory: AgentFactory,#TODO type check
                  controller: Union[Controller, remote.Remote],
                  running_phase: Phase,
                  should_update: bool = False,
