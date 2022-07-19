@@ -18,7 +18,7 @@ namespace rlmeta {
 
 class CircularBuffer {
  public:
-  CircularBuffer(int64_t capacity) : capacity_(capacity) { Reset(); }
+  explicit CircularBuffer(int64_t capacity) : capacity_(capacity) { Reset(); }
 
   int64_t capacity() const { return capacity_; }
 

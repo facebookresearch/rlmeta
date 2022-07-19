@@ -75,13 +75,12 @@ class PPOAgent(Agent):
         self.push_every_n_steps = push_every_n_steps
         self.done = False
         self.trajectory = []
+        self.step_counter = 0
 
         self._device = None
 
-    def device(self) -> torch.device:
-        if self._device is None:
-            self._device = next(self.model.parameters()).device
-        return self._device
+    def reset(self) -> None:
+        self.step_counter = 0
 
     def act(self, timestep: TimeStep) -> Action:
         obs = timestep.observation
@@ -140,7 +139,7 @@ class PPOAgent(Agent):
         stats = StatsDict()
 
         console.log(f"Training for num_steps = {num_steps}")
-        for step in track(range(num_steps), description="Training..."):
+        for _ in track(range(num_steps), description="Training..."):
             t0 = time.perf_counter()
             batch = self.replay_buffer.sample(self.batch_size)
             t1 = time.perf_counter()
@@ -153,7 +152,8 @@ class PPOAgent(Agent):
             stats.extend(step_stats)
             stats.extend(time_stats)
 
-            if step % self.push_every_n_steps == self.push_every_n_steps - 1:
+            self.step_counter += 1
+            if self.step_counter % self.push_every_n_steps == 0:
                 self.model.push()
 
         episode_stats = self.controller.get_stats()
@@ -167,6 +167,11 @@ class PPOAgent(Agent):
             time.sleep(1)
         stats = self.controller.get_stats()
         return stats
+
+    def device(self) -> torch.device:
+        if self._device is None:
+            self._device = next(self.model.parameters()).device
+        return self._device
 
     def _make_replay(self) -> List[NestedTensor]:
         adv, ret = self._calculate_gae_and_return(

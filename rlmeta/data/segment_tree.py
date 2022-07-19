@@ -3,13 +3,14 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Union
+from typing import Optional, Union
 
 import numpy as np
 import torch
 
 from _rlmeta_extension import (SumSegmentTreeFp32, SumSegmentTreeFp64,
                                MinSegmentTreeFp32, MinSegmentTreeFp64)
+from rlmeta.core.types import Tensor
 
 SegmentTreeImpl = Union[SumSegmentTreeFp32, SumSegmentTreeFp64,
                         MinSegmentTreeFp32, MinSegmentTreeFp64]
@@ -49,8 +50,14 @@ class SegmentTree:
     def __setitem__(self, index: Index, value: Value) -> None:
         self._impl[index] = value
 
-    def update(self, index: Index, value: Value) -> None:
-        self._impl.update(index, value)
+    def update(self,
+               index: Index,
+               value: Value,
+               mask: Optional[Tensor] = None) -> None:
+        if mask is None:
+            self._impl.update(index, value)
+        else:
+            self._impl.update(index, value, mask)
 
     def query(self, l: Index, r: Index) -> Value:
         return self._impl.query(l, r)

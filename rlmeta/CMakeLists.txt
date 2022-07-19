@@ -50,9 +50,10 @@ add_subdirectory(
 
 pybind11_add_module(
   _rlmeta_extension
-  ${CMAKE_CURRENT_SOURCE_DIR}/cc/pybind.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/cc/circular_buffer.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/cc/nested_utils.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/cc/pybind.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/cc/timestamp_manager.cc
 )
 target_include_directories(
   _rlmeta_extension PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
