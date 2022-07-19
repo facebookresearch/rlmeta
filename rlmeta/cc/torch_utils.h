@@ -16,6 +16,11 @@ template <typename T>
 struct TorchDataType;
 
 template <>
+struct TorchDataType<bool> {
+  static constexpr torch::ScalarType value = torch::kBool;
+};
+
+template <>
 struct TorchDataType<int64_t> {
   static constexpr torch::ScalarType value = torch::kInt64;
 };

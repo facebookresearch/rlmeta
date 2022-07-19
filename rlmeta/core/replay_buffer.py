@@ -21,6 +21,7 @@ from rlmeta.core.server import Server
 from rlmeta.core.types import Tensor, NestedTensor
 from rlmeta.data import CircularBuffer
 from rlmeta.data import SumSegmentTree, MinSegmentTree
+from rlmeta.data import TimestampManager
 
 console = Console()
 
@@ -117,11 +118,9 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         self._priority_type = priority_type
         self._sum_tree = SumSegmentTree(capacity, dtype=priority_type)
         self._min_tree = MinSegmentTree(capacity, dtype=priority_type)
-
         self._max_priority = 1.0
 
-        self._timestamps = np.full(capacity, -1, dtype=np.int64)
-        self._current_timestamp = 0
+        self._timestamps = TimestampManager(capacity)
 
     def __getitem__(
         self, index: Union[int, Tensor]
@@ -152,7 +151,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
     @property
     def current_timestamp(self) -> int:
-        return self._current_timestamp
+        return self._timestamps.current_timestamp
 
     @remote.remote_method(batch_size=None)
     def append(self,
@@ -204,22 +203,17 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             index: Union[int, Tensor],
             priority: Union[float, Tensor],
             timestamp: Optional[Union[int, Tensor]] = None) -> None:
-        if timestamp is not None:
-            timestamp = data_utils.to_numpy(timestamp)
-            cur_timestamp = self._timestamps[index]
-            mask = (timestamp == cur_timestamp)
-            if isinstance(index, int):
-                if not mask:
-                    return
-            else:
-                index = index[mask]
-                priority = priority[mask]
+        mask = self._timestamps.is_available(
+            index, timestamp) if timestamp is not None else None
 
         priority += self.eps
         if isinstance(priority, float):
             self._max_priority = max(self._max_priority, priority)
-        else:
+        elif mask is None:
             self._max_priority = max(self._max_priority, priority.max().item())
+        else:
+            self._max_priority = max(self._max_priority,
+                                     priority[mask].max().item())
         priority = priority**self.alpha
 
         if isinstance(priority, np.ndarray):
@@ -228,12 +222,13 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             priority = priority.to(
                 data_utils.numpy_dtype_to_torch(self.priority_type))
 
-        self._sum_tree[index] = priority
-        self._min_tree[index] = priority
-
-    def _update_timestamp(self, index: Union[int, Tensor]) -> None:
-        self._timestamps[index] = self._current_timestamp
-        self._current_timestamp += 1
+        if isinstance(index, int):
+            if mask is None or mask:
+                self._sum_tree[index] = priority
+                self._min_tree[index] = priority
+        else:
+            self._sum_tree.update(index, priority, mask)
+            self._min_tree.update(index, priority, mask)
 
     def _compute_weight(
             self, index: Union[int, Tensor]) -> Union[float, torch.Tensor]:
@@ -270,7 +265,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             self._init_priority(index)
         else:
             self._update_priority(index, priority)
-        self._update_timestamp(index)
+        self._timestamps.update(index)
         return index
 
     def _sample(

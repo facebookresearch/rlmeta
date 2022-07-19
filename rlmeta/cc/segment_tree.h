@@ -61,13 +61,6 @@ class SegmentTree {
 
   const T& At(int64_t index) const { return values_[index | capacity_]; }
 
-  std::vector<T> At(const std::vector<int64_t>& index) const {
-    const int64_t n = index.size();
-    std::vector<T> value(n);
-    BatchAtImpl(n, index.data(), value.data());
-    return value;
-  }
-
   py::array_t<T> At(const py::array_t<int64_t>& index) const {
     py::array_t<T> value = utils::NumpyEmptyLike<int64_t, T>(index);
     BatchAtImpl(index.size(), index.data(), value.mutable_data());
@@ -93,20 +86,6 @@ class SegmentTree {
     }
   }
 
-  void Update(const std::vector<int64_t>& index, const T& value) {
-    BatchUpdateImpl(index.size(), index.data(), value);
-  }
-
-  void Update(const std::vector<int64_t>& index, const std::vector<T>& value) {
-    assert(value.size() == 1 || index.size() == value.size());
-    const int64_t n = index.size();
-    if (value.size() == 1) {
-      BatchUpdateImpl(n, index.data(), value[0]);
-    } else {
-      BatchUpdateImpl(n, index.data(), value.data());
-    }
-  }
-
   void Update(const py::array_t<int64_t>& index, const T& value) {
     BatchUpdateImpl(index.size(), index.data(), value);
   }
@@ -118,6 +97,22 @@ class SegmentTree {
       BatchUpdateImpl(n, index.data(), *(value.data()));
     } else {
       BatchUpdateImpl(n, index.data(), value.data());
+    }
+  }
+
+  void Update(const py::array_t<int64_t>& index, const T& value,
+              const py::array_t<bool>& mask) {
+    BatchUpdateImpl(index.size(), index.data(), value, mask.data());
+  }
+
+  void Update(const py::array_t<int64_t>& index, const py::array_t<T>& value,
+              const py::array_t<bool>& mask) {
+    assert(value.size() == 1 || index.size() == value.size());
+    const int64_t n = index.size();
+    if (value.size() == 1) {
+      BatchUpdateImpl(n, index.data(), *(value.data()), mask.data());
+    } else {
+      BatchUpdateImpl(n, index.data(), value.data(), mask.data());
     }
   }
 
@@ -144,6 +139,38 @@ class SegmentTree {
     }
   }
 
+  void Update(const torch::Tensor& index, const T& value,
+              const torch::Tensor& mask) {
+    assert(index.dtype() == torch::kInt64);
+    assert(mask.dtype() == torch::kBool);
+    const torch::Tensor index_contiguous = index.contiguous();
+    const torch::Tensor mask_contiguous = mask.contiguous();
+    const int64_t n = index_contiguous.numel();
+    BatchUpdateImpl(n, index_contiguous.data_ptr<int64_t>(), value,
+                    mask_contiguous.data_ptr<bool>());
+  }
+
+  void Update(const torch::Tensor& index, const torch::Tensor& value,
+              const torch::Tensor& mask) {
+    assert(index.dtype() == torch::kInt64);
+    assert(value.dtype() == utils::TorchDataType<T>::value);
+    assert(value.numel() == 1 || index.sizes() == value.sizes());
+    assert(mask.dtype() == torch::kBool);
+    const torch::Tensor index_contiguous = index.contiguous();
+    const torch::Tensor value_contiguous = value.contiguous();
+    const torch::Tensor mask_contiguous = mask.contiguous();
+    const int64_t n = index_contiguous.numel();
+    if (value_contiguous.numel() == 1) {
+      BatchUpdateImpl(n, index_contiguous.data_ptr<int64_t>(),
+                      *(value_contiguous.data_ptr<T>()),
+                      mask_contiguous.data_ptr<bool>());
+    } else {
+      BatchUpdateImpl(n, index_contiguous.data_ptr<int64_t>(),
+                      value_contiguous.data_ptr<T>(),
+                      mask_contiguous.data_ptr<bool>());
+    }
+  }
+
   // Reduce the range of [l, r) by Operator.
   // Time complexity: O(logN)
   T Query(int64_t l, int64_t r) const {
@@ -164,15 +191,6 @@ class SegmentTree {
       l >>= 1;
       r >>= 1;
     }
-    return ret;
-  }
-
-  std::vector<T> Query(const std::vector<int64_t>& l,
-                       const std::vector<int64_t>& r) const {
-    assert(l.size() == r.size());
-    std::vector<T> ret(l.size());
-    const int64_t n = l.size();
-    BatchQueryImpl(n, l.data(), r.data(), ret.data());
     return ret;
   }
 
@@ -225,9 +243,27 @@ class SegmentTree {
     }
   }
 
+  void BatchUpdateImpl(int64_t n, const int64_t* index, const T& value,
+                       const bool* mask) {
+    for (int64_t i = 0; i < n; ++i) {
+      if (mask[i]) {
+        Update(index[i], value);
+      }
+    }
+  }
+
   void BatchUpdateImpl(int64_t n, const int64_t* index, const T* value) {
     for (int64_t i = 0; i < n; ++i) {
       Update(index[i], value[i]);
+    }
+  }
+
+  void BatchUpdateImpl(int64_t n, const int64_t* index, const T* value,
+                       const bool* mask) {
+    for (int64_t i = 0; i < n; ++i) {
+      if (mask[i]) {
+        Update(index[i], value[i]);
+      }
     }
   }
 
@@ -267,12 +303,6 @@ class SumSegmentTree final : public SegmentTree<T, std::plus<T>> {
       }
     }
     return index ^ this->capacity_;
-  }
-
-  std::vector<int64_t> ScanLowerBound(const std::vector<T>& value) const {
-    std::vector<int64_t> index(value.size());
-    BatchScanLowerBoundImpl(value.size(), value.data(), index.data());
-    return index;
   }
 
   py::array_t<int64_t> ScanLowerBound(const py::array_t<T>& value) const {
@@ -356,11 +386,24 @@ void DefineSumSegmentTree(const std::string& type, py::module& m) {
           "update",
           py::overload_cast<const py::array_t<int64_t>&, const py::array_t<T>&>(
               &SumSegmentTree<T>::Update))
+      .def("update", py::overload_cast<const py::array_t<int64_t>&, const T&,
+                                       const py::array_t<bool>&>(
+                         &SumSegmentTree<T>::Update))
+      .def("update",
+           py::overload_cast<const py::array_t<int64_t>&, const py::array_t<T>&,
+                             const py::array_t<bool>&>(
+               &SumSegmentTree<T>::Update))
       .def("update", py::overload_cast<const torch::Tensor&, const T&>(
                          &SumSegmentTree<T>::Update))
       .def("update",
            py::overload_cast<const torch::Tensor&, const torch::Tensor&>(
                &SumSegmentTree<T>::Update))
+      .def("update",
+           py::overload_cast<const torch::Tensor&, const T&,
+                             const torch::Tensor&>(&SumSegmentTree<T>::Update))
+      .def("update",
+           py::overload_cast<const torch::Tensor&, const torch::Tensor&,
+                             const torch::Tensor&>(&SumSegmentTree<T>::Update))
       .def("query", py::overload_cast<int64_t, int64_t>(
                         &SumSegmentTree<T>::Query, py::const_))
       .def("query", py::overload_cast<const py::array_t<int64_t>&,
@@ -430,11 +473,24 @@ void DefineMinSegmentTree(const std::string& type, py::module& m) {
           "update",
           py::overload_cast<const py::array_t<int64_t>&, const py::array_t<T>&>(
               &MinSegmentTree<T>::Update))
+      .def("update", py::overload_cast<const py::array_t<int64_t>&, const T&,
+                                       const py::array_t<bool>&>(
+                         &MinSegmentTree<T>::Update))
+      .def("update",
+           py::overload_cast<const py::array_t<int64_t>&, const py::array_t<T>&,
+                             const py::array_t<bool>&>(
+               &MinSegmentTree<T>::Update))
       .def("update", py::overload_cast<const torch::Tensor&, const T&>(
                          &MinSegmentTree<T>::Update))
       .def("update",
            py::overload_cast<const torch::Tensor&, const torch::Tensor&>(
                &MinSegmentTree<T>::Update))
+      .def("update",
+           py::overload_cast<const torch::Tensor&, const T&,
+                             const torch::Tensor&>(&MinSegmentTree<T>::Update))
+      .def("update",
+           py::overload_cast<const torch::Tensor&, const torch::Tensor&,
+                             const torch::Tensor&>(&MinSegmentTree<T>::Update))
       .def("query", py::overload_cast<int64_t, int64_t>(
                         &MinSegmentTree<T>::Query, py::const_))
       .def("query", py::overload_cast<const py::array_t<int64_t>&,

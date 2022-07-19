@@ -117,6 +117,7 @@ class Remote:
         if self._connected:
             return
         self._client = moolib.Rpc()
+        self._client.set_transports(["uv"])
         self._client.set_name(self._name)
         self._client.set_timeout(self._timeout)
         self._client.connect(self._server_addr)
