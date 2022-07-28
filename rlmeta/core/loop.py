@@ -20,7 +20,7 @@ import torch.multiprocessing as mp
 import moolib
 
 import rlmeta.core.remote as remote
-import rlmeta.utils.asycio_utils as asycio_utils
+import rlmeta.utils.asyncio_utils as asyncio_utils
 import rlmeta.utils.moolib_utils as moolib_utils
 
 from rlmeta.agents.agent import Agent, AgentFactory
@@ -139,10 +139,10 @@ class AsyncLoop(Loop, Launchable):
         console.log(f"Starting async loop with: {self._controller}")
         self._loop = asyncio.get_event_loop()
         self._tasks.append(
-            asycio_utils.create_task(self._loop, self._check_phase()))
+            asyncio_utils.create_task(self._loop, self._check_phase()))
         for i, (env, agent) in enumerate(zip(self._envs, self._agents)):
             index = self.index_offset + i
-            task = asycio_utils.create_task(
+            task = asyncio_utils.create_task(
                 self._loop,
                 self._run_loop(index, env, agent,
                                copy.deepcopy(self._episode_callbacks)))
