@@ -55,6 +55,7 @@ std::shared_ptr<ComputationQueue> Server::RegisterQueue(
 void DefineServer(py::module& m) {
   py::class_<Server, std::shared_ptr<Server>>(m, "Server")
       .def(py::init<const std::string&>())
+      .def_property_readonly("addr", &Server::addr)
       .def("start", &Server::Start)
       .def("stop", &Server::Stop, py::call_guard<py::gil_scoped_release>())
       .def("register_queue", &Server::RegisterQueue, py::arg("func_name"),

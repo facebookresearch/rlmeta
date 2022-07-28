@@ -49,8 +49,9 @@ class ServiceImpl final : public Rpc::Service {
 class Server {
  public:
   explicit Server(const std::string& addr) : addr_(addr) {}
-
   ~Server() { Stop(); }
+
+  const std::string& addr() const { return addr_; }
 
   void Start();
   void Stop();
