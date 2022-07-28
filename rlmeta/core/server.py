@@ -16,7 +16,7 @@ from rich.console import Console
 
 import moolib
 
-import rlmeta.utils.asycio_utils as asycio_utils
+import rlmeta.utils.asyncio_utils as asyncio_utils
 
 from rlmeta.core.launchable import Launchable
 from rlmeta.core.remote import Remotable
@@ -127,8 +127,8 @@ class Server(Launchable):
             que = self._server.define_queue(func_name,
                                             batch_size=batch_size,
                                             dynamic_batching=True)
-        task = asycio_utils.create_task(self._loop,
-                                        self._async_process(que, func_impl))
+        task = asyncio_utils.create_task(self._loop,
+                                         self._async_process(que, func_impl))
         self._tasks.append(task)
 
     async def _async_process(self, que: moolib.Queue,

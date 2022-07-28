@@ -94,7 +94,7 @@ def stack_fields(input: Sequence[NestedTensor]) -> NestedTensor:
 def unstack_fields(input: NestedTensor,
                    batch_size: int) -> Tuple[NestedTensor, ...]:
     if batch_size == 1:
-        return nested_utils.map_nested(lambda x: x.squeeze(0), input)
+        return (nested_utils.map_nested(lambda x: x.squeeze(0), input),)
     else:
         return nested_utils.unbatch_nested(lambda x: torch.unbind(x), input,
                                            batch_size)
