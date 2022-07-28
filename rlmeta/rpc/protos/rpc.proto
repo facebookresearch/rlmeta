@@ -1,0 +1,27 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+//
+// This source code is licensed under the MIT license found in the
+// LICENSE file in the root directory of this source tree.
+
+syntax = "proto3";
+
+package rlmeta.rpc;
+
+service Rpc {
+  rpc RemoteCall(RpcRequest) returns (RpcResponse) {}
+}
+
+message Error {
+  string message = 1;
+}
+
+message RpcRequest {
+  string function = 1;
+  bytes args = 2;
+  bytes kwargs = 3;
+}
+
+message RpcResponse {
+  bytes return_value = 1;
+  optional Error error = 2;
+}

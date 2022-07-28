@@ -9,7 +9,7 @@ set(
   -march=native -Wfatal-errors -fvisibility=hidden"
 )
 
-# set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 add_compile_definitions(_GLIBCXX_USE_CXX11_ABI=0)
 
 # PyTorch dependency
@@ -48,13 +48,33 @@ add_subdirectory(
   ${CMAKE_CURRENT_BINARY_DIR}/third_party/pybind11
 )
 
+add_subdirectory(
+  ${CMAKE_CURRENT_SOURCE_DIR}/rpc
+  ${CMAKE_CURRENT_BINARY_DIR}/rpc
+)
+
 pybind11_add_module(
   _rlmeta_extension
   ${CMAKE_CURRENT_SOURCE_DIR}/cc/circular_buffer.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/cc/nested_utils.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/cc/pybind.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/cc/timestamp_manager.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/rpc/cc/blocking_counter.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/rpc/cc/computation_queue.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/rpc/cc/server.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/rpc/cc/task.cc
 )
 target_include_directories(
-  _rlmeta_extension PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
-target_link_libraries(_rlmeta_extension PUBLIC torch ${TORCH_PYTHON_LIBRARIES})
+  _rlmeta_extension
+  PUBLIC
+  ${CMAKE_CURRENT_SOURCE_DIR}/..
+  ${CMAKE_CURRENT_BINARY_DIR}/rpc
+)
+target_link_libraries(
+  _rlmeta_extension
+  PUBLIC
+  torch
+  ${TORCH_PYTHON_LIBRARIES}
+  grpc++
+  rpc_grpc_proto
+)

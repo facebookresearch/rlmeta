@@ -4,5 +4,5 @@
 **/outputs/*
 *.egg-info/*
 *.eggs/*
-*.so
+*.so*
 compile_commands.json

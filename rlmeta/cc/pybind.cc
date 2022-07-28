@@ -9,6 +9,9 @@
 #include "rlmeta/cc/nested_utils.h"
 #include "rlmeta/cc/segment_tree.h"
 #include "rlmeta/cc/timestamp_manager.h"
+#include "rlmeta/rpc/cc/computation_queue.h"
+#include "rlmeta/rpc/cc/server.h"
+#include "rlmeta/rpc/cc/task.h"
 
 namespace py = pybind11;
 
@@ -23,6 +26,15 @@ PYBIND11_MODULE(_rlmeta_extension, m) {
   rlmeta::DefineCircularBuffer(m);
   rlmeta::DefineNestedUtils(m);
   rlmeta::DefineTimestampManager(m);
+
+  rlmeta::rpc::DefineTaskBase(m);
+  rlmeta::rpc::DefineTask(m);
+  rlmeta::rpc::DefineBatchedTask(m);
+
+  rlmeta::rpc::DefineComputationQueue(m);
+  rlmeta::rpc::DefineBatchedComputationQueue(m);
+
+  rlmeta::rpc::DefineServer(m);
 }
 
 }  // namespace
