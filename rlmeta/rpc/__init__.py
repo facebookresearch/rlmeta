@@ -4,7 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 from _rlmeta_extension.rpc import ComputationQueue, BatchedComputationQueue
-from _rlmeta_extension.rpc import TaskBase, Task, BatchedTask
+from _rlmeta_extension.rpc import Task, BatchedTask
 
 from rlmeta.rpc.client import Client
 from rlmeta.rpc.server import Server
@@ -12,7 +12,6 @@ from rlmeta.rpc.server import Server
 __all__ = [
     "ComputationQueue",
     "BatchedComputationQueue",
-    "TaskBase",
     "Task",
     "BatchedTask",
     "Client",

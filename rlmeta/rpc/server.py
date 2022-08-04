@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-import pickle
+import time
 import threading
 
 from typing import Any, Callable, Optional, NoReturn
@@ -11,6 +11,7 @@ from typing import Any, Callable, Optional, NoReturn
 import rlmeta.utils.data_utils as data_utils
 
 import _rlmeta_extension.rpc as rpc
+import _rlmeta_extension.rpc.rpc_utils as rpc_utils
 
 
 class Server(rpc.Server):
@@ -60,18 +61,13 @@ class Server(rpc.Server):
         except StopIteration:
             return
 
-    def _wrap_func(self, task: rpc.TaskBase, func: Callable[..., Any]) -> None:
+    def _wrap_func(self, task: rpc.Task, func: Callable[..., Any]) -> None:
         batch_size = None
-
-        # TODO: Find better serialization method to replace pickle here.
-        if isinstance(task, rpc.Task):
-            args = pickle.loads(task.args())
-            kwargs = pickle.loads(task.kwargs())
-        else:
+        args = task.args()
+        kwargs = task.kwargs()
+        if isinstance(task, rpc.BatchedTask):
             batch_size = task.batch_size
-            args = tuple(pickle.loads(i) for i in task.args())
             args = data_utils.stack_fields(args)
-            kwargs = tuple(pickle.loads(i) for i in task.kwargs())
             kwargs = data_utils.stack_fields(kwargs)
 
         # Lock to protect any state inside func.
@@ -79,12 +75,10 @@ class Server(rpc.Server):
         with self._lock:
             ret = func(*args, **kwargs)
 
-        if batch_size is None:
-            ret = pickle.dumps(ret)
-        else:
+        if batch_size is not None:
             if ret is None:
-                ret = (pickle.dumps(None),) * batch_size
+                ret = (None,) * batch_size
             else:
                 ret = data_utils.unstack_fields(ret, batch_size)
-                ret = tuple(pickle.dumps(i) for i in ret)
+
         task.set_return_value(ret)

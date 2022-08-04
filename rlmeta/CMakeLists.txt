@@ -60,9 +60,13 @@ pybind11_add_module(
   ${CMAKE_CURRENT_SOURCE_DIR}/cc/pybind.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/cc/timestamp_manager.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/rpc/cc/blocking_counter.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/rpc/cc/client.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/rpc/cc/computation_queue.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/rpc/cc/rpc_future.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/rpc/cc/rpc_utils.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/rpc/cc/server.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/rpc/cc/task.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/rpc/cc/tensor_wrapper.cc
 )
 target_include_directories(
   _rlmeta_extension

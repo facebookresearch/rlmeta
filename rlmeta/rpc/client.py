@@ -3,6 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+import asyncio
 import pickle
 
 from typing import Any
@@ -10,39 +11,22 @@ from typing import Any
 import grpc
 import grpc.experimental
 
-import rlmeta.rpc.rpc_pb2 as rpc_pb2
-import rlmeta.rpc.rpc_pb2_grpc as rpc_pb2_grpc
+import _rlmeta_extension.rpc as _rpc
+import _rlmeta_extension.rpc.rpc_utils as rpc_utils
 
 
-class Client:
-
-    def connect(self, addr: str) -> None:
-        # self._channel = grpc.insecure_channel(addr)
-        # self._rpc_stub = rpc_pb2_grpc.RpcStub(self._channel)
-
-        self._addr = addr
-        self._channel_options = [
-            (grpc.experimental.ChannelOptions.SingleThreadedUnaryStream, 1)
-        ]
+class Client(_rpc.Client):
 
     def rpc(self, function: str, *args, **kwargs) -> Any:
-        with grpc.insecure_channel(self._addr,
-                                   options=self._channel_options) as channel:
-            stub = rpc_pb2_grpc.RpcStub(channel)
-            # ret = self._rpc_stub.RemoteCall(
-            ret = stub.RemoteCall(
-                rpc_pb2.RpcRequest(function=function,
-                                   args=pickle.dumps(args),
-                                   kwargs=pickle.dumps(kwargs)))
-        return pickle.loads(ret.return_value)
+        return super().rpc(function, *args, **kwargs)
 
-    async def async_rpc(self, function: str, *args, **kwargs) -> Any:
-        async with grpc.aio.insecure_channel(
-                self._addr, options=self._channel_options) as channel:
-            stub = rpc_pb2_grpc.RpcStub(channel)
-            # ret = await self._rpc_stub.RemoteCall(
-            ret = await stub.RemoteCall(
-                rpc_pb2.RpcRequest(function=function,
-                                   args=pickle.dumps(args),
-                                   kwargs=pickle.dumps(kwargs)))
-        return pickle.loads(ret.return_value)
+    def rpc_future(self, function: str, *args, **kwargs) -> _rpc.RpcFuture:
+        return super().rpc_future(function, *args, **kwargs)
+
+    def async_rpc(self, function: str, *args, **kwargs) -> Any:
+        loop = asyncio.get_running_loop()
+        ret = super().rpc_future(function, *args, **kwargs)
+        fut = asyncio.Future()
+        # loop.call_soon_threadsafe(lambda x: fut.set_result(x.get()), ret)
+        loop.call_soon(lambda x: fut.set_result(x.get()), ret)
+        return fut

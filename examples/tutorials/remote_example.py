@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import asyncio
+import time
 
 import torch
 import torch.multiprocessing as mp
@@ -62,18 +63,18 @@ def main():
     adder = Adder()
     adder_server = Server(name="adder_server", addr="127.0.0.1:4411")
     adder_server.add_service(adder)
-
     adder_client = remote_utils.make_remote(adder, adder_server)
 
     adder_server.start()
+    time.sleep(2)
     adder_client.connect()
 
     a = 1
     b = 2
     c = adder_client.add(a, b)
     print(f"{a} + {b} = {c}")
-    print("")
-    asyncio.run(run_batch(adder_client, send_tensor=False))
+    # print("")
+    # asyncio.run(run_batch(adder_client, send_tensor=False))
     print("")
     asyncio.run(run_batch(adder_client, send_tensor=True))
 

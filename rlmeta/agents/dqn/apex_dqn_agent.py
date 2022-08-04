@@ -163,7 +163,7 @@ class ApexDQNAgent(Agent):
                     for m in self._additional_models_to_update:
                         m.push()
 
-        episode_stats = self.controller.get_stats()
+        episode_stats = StatsDict.from_dict(self.controller.get_stats())
         stats.update(episode_stats)
 
         return stats
@@ -172,7 +172,7 @@ class ApexDQNAgent(Agent):
         self.controller.set_phase(Phase.EVAL, limit=num_episodes, reset=True)
         while self.controller.get_count() < num_episodes:
             time.sleep(1)
-        stats = self.controller.get_stats()
+        stats = StatsDict.from_dict(self.controller.get_stats())
         return stats
 
     def make_replay(self) -> Optional[List[NestedTensor]]:

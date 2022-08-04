@@ -8,22 +8,37 @@
 namespace rlmeta {
 namespace rpc {
 
-std::future<std::string> BatchedComputationQueue::Put(
-    const std::string& args, const std::string& kwargs) {
+std::future<NestedData> BatchedComputationQueue::Put(const NestedData& args,
+                                                     const NestedData& kwargs) {
   std::scoped_lock lk(mu_);
   if (cur_computation_ == nullptr) {
     cur_computation_ = std::make_shared<BatchedTask>(batch_size_);
     queue_impl_.Put(cur_computation_);
   }
-  std::future<std::string> ret = cur_computation_->Add(args, kwargs);
+  std::future<NestedData> ret = cur_computation_->Add(args, kwargs);
   if (cur_computation_->Full()) {
     cur_computation_.reset();
   }
   return ret;
 }
 
-std::shared_ptr<TaskBase> BatchedComputationQueue::Get() {
-  std::shared_ptr<TaskBase> ret = queue_impl_.Get().value_or(nullptr);
+std::future<NestedData> BatchedComputationQueue::Put(NestedData&& args,
+                                                     NestedData&& kwargs) {
+  std::scoped_lock lk(mu_);
+  if (cur_computation_ == nullptr) {
+    cur_computation_ = std::make_shared<BatchedTask>(batch_size_);
+    queue_impl_.Put(cur_computation_);
+  }
+  std::future<NestedData> ret =
+      cur_computation_->Add(std::move(args), std::move(kwargs));
+  if (cur_computation_->Full()) {
+    cur_computation_.reset();
+  }
+  return ret;
+}
+
+std::shared_ptr<Task> BatchedComputationQueue::Get() {
+  std::shared_ptr<Task> ret = queue_impl_.Get().value_or(nullptr);
   if (ret != nullptr) {
     std::scoped_lock lk(mu_);
     if (!dynamic_cast<BatchedTask*>(ret.get())->Full()) {
@@ -33,8 +48,8 @@ std::shared_ptr<TaskBase> BatchedComputationQueue::Get() {
   return ret;
 }
 
-std::shared_ptr<TaskBase> BatchedComputationQueue::GetFullBatch() {
-  std::shared_ptr<TaskBase> ret = queue_impl_.Get().value_or(nullptr);
+std::shared_ptr<Task> BatchedComputationQueue::GetFullBatch() {
+  std::shared_ptr<Task> ret = queue_impl_.Get().value_or(nullptr);
   if (ret != nullptr) {
     dynamic_cast<BatchedTask*>(ret.get())->Wait();
   }

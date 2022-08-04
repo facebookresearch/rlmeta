@@ -13,6 +13,7 @@
 
 #include "rlmeta/rpc/cc/queue_impl.h"
 #include "rlmeta/rpc/cc/task.h"
+#include "rpc.pb.h"
 
 namespace py = pybind11;
 
@@ -24,21 +25,28 @@ class ComputationQueue {
   ComputationQueue() = default;
   explicit ComputationQueue(int64_t capacity) : queue_impl_(capacity) {}
 
-  virtual std::future<std::string> Put(const std::string& args,
-                                       const std::string& kwargs) {
+  virtual std::future<NestedData> Put(const NestedData& args,
+                                      const NestedData& kwargs) {
     std::shared_ptr<Task> task = std::make_shared<Task>(args, kwargs);
     queue_impl_.Put(task);
     return task->Future();
   }
 
-  virtual std::shared_ptr<TaskBase> Get() {
+  virtual std::future<NestedData> Put(NestedData&& args, NestedData&& kwargs) {
+    std::shared_ptr<Task> task =
+        std::make_shared<Task>(std::move(args), std::move(kwargs));
+    queue_impl_.Put(task);
+    return task->Future();
+  }
+
+  virtual std::shared_ptr<Task> Get() {
     return queue_impl_.Get().value_or(nullptr);
   }
 
   virtual void Shutdown() { queue_impl_.Shutdown(); }
 
  protected:
-  QueueImpl<std::shared_ptr<TaskBase>> queue_impl_;
+  QueueImpl<std::shared_ptr<Task>> queue_impl_;
 };
 
 class BatchedComputationQueue : public ComputationQueue {
@@ -48,12 +56,12 @@ class BatchedComputationQueue : public ComputationQueue {
   BatchedComputationQueue(int64_t capacity, int64_t batch_size)
       : ComputationQueue(capacity), batch_size_(batch_size) {}
 
-  std::future<std::string> Put(const std::string& args,
-                               const std::string& kwargs) override;
+  std::future<NestedData> Put(const NestedData& args,
+                              const NestedData& kwargs) override;
+  std::future<NestedData> Put(NestedData&& args, NestedData&& kwargs) override;
 
-  std::shared_ptr<TaskBase> Get() override;
-
-  std::shared_ptr<TaskBase> GetFullBatch();
+  std::shared_ptr<Task> Get() override;
+  std::shared_ptr<Task> GetFullBatch();
 
  protected:
   const int64_t batch_size_;

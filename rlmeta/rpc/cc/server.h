@@ -7,7 +7,6 @@
 
 #include <grpc/support/log.h>
 #include <grpcpp/grpcpp.h>
-#include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 
 #include <functional>
@@ -27,8 +26,7 @@ namespace py = pybind11;
 namespace rlmeta {
 namespace rpc {
 
-using PyFunc =
-    std::function<std::string(const std::string&, const std::string&)>;
+using PyFunc = std::function<NestedData(const NestedData&, const NestedData&)>;
 using PyFuncDict = std::unordered_map<std::string, PyFunc>;
 
 class ServiceImpl final : public Rpc::Service {
@@ -61,8 +59,6 @@ class Server {
 
  protected:
   void ServePyFuncQueue(const std::string& func_name);
-
-  void ServeImpl(const std::string& func_name, TaskBase& task);
 
   const std::string addr_;
   std::unique_ptr<grpc::Server> server_;

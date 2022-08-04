@@ -4,13 +4,16 @@
 # LICENSE file in the root directory of this source tree.
 
 import collections
-import time
+import concurrent.futures
 import logging
+import time
 
 from typing import Callable, Optional, Sequence, Tuple, Union
-from rich.console import Console
+
 import numpy as np
 import torch
+
+from rich.console import Console
 
 import rlmeta.core.remote as remote
 import rlmeta.utils.data_utils as data_utils
@@ -290,10 +293,11 @@ class RemoteReplayBuffer(remote.Remote):
                  prefetch: int = 0,
                  timeout: float = 60) -> None:
         super().__init__(target, server_name, server_addr, name, timeout)
-        self._prefetch = prefetch
-        self._futures = collections.deque()
         self._server_name = server_name
         self._server_addr = server_addr
+
+        self._prefetch = prefetch
+        self._futures = collections.deque()
 
     def __repr__(self):
         return (f"RemoteReplayBuffer(server_name={self._server_name}, " +
@@ -308,16 +312,22 @@ class RemoteReplayBuffer(remote.Remote):
     ) -> Union[NestedTensor, Tuple[NestedTensor, torch.Tensor, torch.Tensor,
                                    torch.Tensor]]:
         if len(self._futures) > 0:
-            ret = self._futures.popleft().result()
+            # ret = self._futures.popleft().result()
+            ret = self._futures.popleft().get()
         else:
-            ret = self.client.sync(self.server_name,
-                                   self.remote_method_name("sample"),
-                                   batch_size)
+            # ret = self.client.sync(self.server_name,
+            #                        self.remote_method_name("sample"),
+            #                        batch_size)
+            ret = self.client.rpc(self.remote_method_name("sample"), batch_size)
 
-        while len(self._futures) < self.prefetch:
-            fut = self.client.async_(self.server_name,
-                                     self.remote_method_name("sample"),
-                                     batch_size)
+        # while len(self._futures) < self.prefetch:
+        #     fut = self.client.async_(self.server_name,
+        #                              self.remote_method_name("sample"),
+        #                              batch_size)
+        #     self._futures.append(fut)
+        while len(self._futures) < self._prefetch:
+            fut = self.client.rpc_future(self.remote_method_name("sample"),
+                                         batch_size)
             self._futures.append(fut)
 
         return ret
@@ -329,14 +339,21 @@ class RemoteReplayBuffer(remote.Remote):
         if len(self._futures) > 0:
             ret = await self._futures.popleft()
         else:
-            ret = await self.client.async_(self.server_name,
-                                           self.remote_method_name("sample"),
-                                           batch_size)
+            # ret = await self.client.async_(self.server_name,
+            #                                self.remote_method_name("sample"),
+            #                                batch_size)
+            ret = await self.client.async_rpc(self.remote_method_name("sample"),
+                                              batch_size)
 
-        while len(self._futures) < self.prefetch:
-            fut = self.client.async_(self.server_name,
-                                     self.remote_method_name("sample"),
-                                     batch_size)
+        # while len(self._futures) < self.prefetch:
+        #     fut = self.client.async_(self.server_name,
+        #                              self.remote_method_name("sample"),
+        #                              batch_size)
+        #     self._futures.append(fut)
+
+        while len(self._futures) < self._prefetch:
+            fut = self.client.async_rpc(self.remote_method_name("sample"),
+                                        batch_size)
             self._futures.append(fut)
 
         return ret

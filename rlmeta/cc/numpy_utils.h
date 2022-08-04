@@ -28,10 +28,7 @@ std::vector<int64_t> NumpyArrayShape(const py::array_t<T>& arr) {
 
 template <typename T_SRC, typename T_DST = T_SRC>
 py::array_t<T_DST> NumpyEmptyLike(const py::array_t<T_SRC>& src) {
-  py::array_t<T_DST> dst(src.size());
-  const std::vector<int64_t> shape = NumpyArrayShape(src);
-  dst.resize(shape);
-  return dst;
+  return py::array_t<T_DST>(NumpyArrayShape(src));
 }
 
 }  // namespace utils

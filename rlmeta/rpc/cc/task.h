@@ -14,84 +14,68 @@
 #include <vector>
 
 #include "rlmeta/rpc/cc/blocking_counter.h"
+#include "rlmeta/rpc/cc/rpc_utils.h"
+#include "rpc.pb.h"
 
 namespace py = pybind11;
 
 namespace rlmeta {
 namespace rpc {
 
-class TaskBase {
+class Task {
  public:
-  virtual py::object Args() = 0;
-  virtual py::object Kwargs() = 0;
-  virtual void SetReturnValue(py::object&& return_value) = 0;
-};
+  Task() = default;
 
-// https://pybind11.readthedocs.io/en/stable/advanced/classes.html#overriding-virtuals
-class PyTaskBase : public TaskBase {
- public:
-  using TaskBase::TaskBase;
-
-  py::object Args() override {
-    PYBIND11_OVERRIDE_PURE(py::object, TaskBase, Args);
-  }
-
-  py::object Kwargs() override {
-    PYBIND11_OVERRIDE_PURE(py::object, TaskBase, Kwargs);
-  }
-
-  void SetReturnValue(py::object&& return_value) override {
-    PYBIND11_OVERRIDE_PURE(void, TaskBase, SetReturnValue, return_value);
-  }
-};
-
-class Task : public TaskBase {
- public:
-  Task(const std::string& args, const std::string& kwargs)
+  Task(const NestedData& args, const NestedData& kwargs)
       : args_(args), kwargs_(kwargs) {}
 
-  py::object Args() override { return py::bytes(std::move(args_)); }
-  py::object Kwargs() override { return py::bytes(std::move(kwargs_)); }
+  Task(NestedData&& args, NestedData&& kwargs)
+      : args_(std::move(args)), kwargs_(std::move(kwargs)) {}
 
-  std::future<std::string> Future() { return promise_.get_future(); }
+  virtual py::object Args() {
+    return rpc_utils::NestedDataToPython(std::move(args_));
+  }
 
-  void SetReturnValue(py::object&& return_value) override {
-    promise_.set_value(
-        py::reinterpret_borrow<py::bytes>(std::move(return_value)));
+  virtual py::object Kwargs() {
+    return rpc_utils::NestedDataToPython(std::move(kwargs_));
+  }
+
+  std::future<NestedData> Future() { return promise_.get_future(); }
+
+  virtual void SetReturnValue(const py::object& return_value) {
+    promise_.set_value(rpc_utils::PythonToNestedData(return_value));
   }
 
  protected:
-  std::string args_;
-  std::string kwargs_;
-  std::promise<std::string> promise_;
+  NestedData args_;
+  NestedData kwargs_;
+  std::promise<NestedData> promise_;
 };
 
-class BatchedTask : public TaskBase {
+class BatchedTask : public Task {
  public:
   explicit BatchedTask(int64_t capacity)
       : capacity_(capacity), num_to_wait_(capacity) {
-    batch_.reserve(capacity_);
+    promises_.reserve(capacity);
   }
 
   int64_t capacity() const { return capacity_; }
-  int64_t BatchSize() const { return batch_.size(); }
+  int64_t batch_size() const { return batch_size_; }
 
-  bool Empty() const { return batch_.empty(); }
-  bool Full() const { return static_cast<int64_t>(batch_.size()) == capacity_; }
+  bool Empty() const { return batch_size_ == 0; }
+  bool Full() const { return batch_size_ == capacity_; }
 
-  py::object Args() override;
-  py::object Kwargs() override;
+  void SetReturnValue(const py::object& return_value) override;
 
-  void SetReturnValue(py::object&& return_value) override;
-
-  std::future<std::string> Add(const std::string& args,
-                               const std::string& kwargs);
+  std::future<NestedData> Add(const NestedData& args, const NestedData& kwargs);
+  std::future<NestedData> Add(NestedData&& args, NestedData&& kwargs);
 
   void Wait() { num_to_wait_.Wait(); }
 
  protected:
   const int64_t capacity_;
-  std::vector<Task> batch_;
+  int64_t batch_size_ = 0;
+  std::vector<std::promise<NestedData>> promises_;
 
   BlockingCounter num_to_wait_;
 };

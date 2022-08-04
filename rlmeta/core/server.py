@@ -14,8 +14,9 @@ import torch
 import torch.multiprocessing as mp
 from rich.console import Console
 
-import moolib
+# import moolib
 
+import rlmeta.rpc as rpc
 import rlmeta.utils.asyncio_utils as asyncio_utils
 
 from rlmeta.core.launchable import Launchable
@@ -85,64 +86,75 @@ class Server(Launchable):
             if isinstance(service, Launchable):
                 service.init_execution()
 
-        self._server = moolib.Rpc()
-        self._server.set_transports(["uv"])
-        self._server.set_name(self._name)
-        self._server.set_timeout(self._timeout)
-        console.log(f"Server={self.name} listening to {self._addr}")
-        try:
-            self._server.listen(self._addr)
-        except:
-            console.log(f"ERROR on listen({self._addr}) from: server={self}")
-            raise
+        # self._server = moolib.Rpc()
+        # self._server.set_transports(["uv"])
+        # self._server.set_name(self._name)
+        # self._server.set_timeout(self._timeout)
+        # console.log(f"Server={self.name} listening to {self._addr}")
+        # try:
+        #     self._server.listen(self._addr)
+        # except:
+        #     console.log(f"ERROR on listen({self._addr}) from: server={self}")
+        #     raise
 
-    def _start_services(self) -> NoReturn:
-        self._loop = asyncio.get_event_loop()
-        self._tasks = []
-        console.log(f"Server={self.name} starting services: {self._services}")
+        self._server = rpc.Server(self._addr)
         for service in self._services:
             for method in service.remote_methods:
                 method_impl = getattr(service, method)
                 batch_size = getattr(method_impl, "__batch_size__", None)
-                self._add_server_task(service.remote_method_name(method),
+                self._server.register(service.remote_method_name(method),
                                       method_impl, batch_size)
-        try:
-            if not self._loop.is_running():
-                self._loop.run_forever()
-        except Exception as e:
-            logging.error(e)
-            raise
-        finally:
-            for task in self._tasks:
-                task.cancel()
-            self._loop.stop()
-            self._loop.close()
+
+    def _start_services(self) -> NoReturn:
+        # self._loop = asyncio.get_event_loop()
+        # self._tasks = []
+        # console.log(f"Server={self.name} starting services: {self._services}")
+        # for service in self._services:
+        #     for method in service.remote_methods:
+        #         method_impl = getattr(service, method)
+        #         batch_size = getattr(method_impl, "__batch_size__", None)
+        #         self._add_server_task(service.remote_method_name(method),
+        #                               method_impl, batch_size)
+        # try:
+        #     if not self._loop.is_running():
+        #         self._loop.run_forever()
+        # except Exception as e:
+        #     logging.error(e)
+        #     raise
+        # finally:
+        #     for task in self._tasks:
+        #         task.cancel()
+        #     self._loop.stop()
+        #     self._loop.close()
+
+        self._server.start()
+        console.log(f"Server={self.name} listening to {self._addr}")
         console.log(f"Server={self.name} services started")
 
-    def _add_server_task(self, func_name: str, func_impl: Callable[..., Any],
-                         batch_size: Optional[int]) -> None:
-        if batch_size is None:
-            que = self._server.define_queue(func_name)
-        else:
-            que = self._server.define_queue(func_name,
-                                            batch_size=batch_size,
-                                            dynamic_batching=True)
-        task = asyncio_utils.create_task(self._loop,
-                                         self._async_process(que, func_impl))
-        self._tasks.append(task)
-
-    async def _async_process(self, que: moolib.Queue,
-                             func: Callable[..., Any]) -> None:
-        try:
-            while True:
-                ret_cb, args, kwargs = await que
-                ret = func(*args, **kwargs)
-                ret_cb(ret)
-        except asyncio.CancelledError:
-            pass
-        except Exception as e:
-            logging.error(e)
-            raise e
+    # def _add_server_task(self, func_name: str, func_impl: Callable[..., Any],
+    #                      batch_size: Optional[int]) -> None:
+    #     if batch_size is None:
+    #         que = self._server.define_queue(func_name)
+    #     else:
+    #         que = self._server.define_queue(func_name,
+    #                                         batch_size=batch_size,
+    #                                         dynamic_batching=True)
+    #     task = asyncio_utils.create_task(self._loop,
+    #                                      self._async_process(que, func_impl))
+    #     self._tasks.append(task)
+    #
+    # async def _async_process(self, que: moolib.Queue,
+    #                          func: Callable[..., Any]) -> None:
+    #     try:
+    #         while True:
+    #             ret_cb, args, kwargs = await que
+    #             ret = func(*args, **kwargs)
+    #             ret_cb(ret)
+    #     except asyncio.CancelledError:
+    #         pass
+    #     except Exception as e:
+    #         logging.error(e)
+    #         raise e
 
 
 class ServerList:

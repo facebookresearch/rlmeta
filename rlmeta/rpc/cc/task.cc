@@ -10,59 +10,50 @@
 namespace rlmeta {
 namespace rpc {
 
-py::object BatchedTask::Args() {
-  const int64_t batch_size = batch_.size();
-  py::tuple ret(batch_size);
-  for (int64_t i = 0; i < batch_size; ++i) {
-    ret[i] = batch_[i].Args();
-  }
-  return ret;
-}
-
-py::object BatchedTask::Kwargs() {
-  const int64_t batch_size = batch_.size();
-  py::tuple ret(batch_size);
-  for (int64_t i = 0; i < batch_size; ++i) {
-    ret[i] = batch_[i].Kwargs();
-  }
-  return ret;
-}
-
-void BatchedTask::SetReturnValue(py::object&& return_value) {
-  const int64_t batch_size = batch_.size();
-  py::tuple rets = py::reinterpret_borrow<py::tuple>(return_value);
-  assert(rets.size() == batch_size);
-  for (int64_t i = 0; i < batch_size; ++i) {
-    batch_[i].SetReturnValue(std::move(rets[i]));
+void BatchedTask::SetReturnValue(const py::object& return_value) {
+  NestedData ret = rpc_utils::PythonToNestedData(return_value);
+  py::gil_scoped_release release;
+  assert(ret.has_vec());
+  assert(ret.vec_size() == batch_size_);
+  for (int64_t i = 0; i < batch_size_; ++i) {
+    promises_[i].set_value(std::move(*ret.mutable_vec()->mutable_data(i)));
   }
 }
 
-std::future<std::string> BatchedTask::Add(const std::string& args,
-                                          const std::string& kwargs) {
-  const int64_t batch_size = batch_.size();
-  assert(batch_size < capacity_);
-  auto& task = batch_.emplace_back(args, kwargs);
+std::future<NestedData> BatchedTask::Add(const NestedData& args,
+                                         const NestedData& kwargs) {
+  assert(batch_size_ < capacity_);
+  std::promise<NestedData>& p = promises_.emplace_back();
+  *args_.mutable_vec()->add_data() = args;
+  *kwargs_.mutable_vec()->add_data() = kwargs;
+  ++batch_size_;
   num_to_wait_.DecrementCount();
-  return task.Future();
+  return p.get_future();
 }
 
-void DefineTaskBase(py::module& m) {
-  py::class_<TaskBase, PyTaskBase, std::shared_ptr<TaskBase>>(m, "TaskBase")
-      .def("args", &TaskBase::Args)
-      .def("kwargs", &TaskBase::Kwargs)
-      .def("set_return_value", &TaskBase::SetReturnValue);
+std::future<NestedData> BatchedTask::Add(NestedData&& args,
+                                         NestedData&& kwargs) {
+  assert(batch_size_ < capacity_);
+  std::promise<NestedData>& p = promises_.emplace_back();
+  *args_.mutable_vec()->add_data() = std::move(args);
+  *kwargs_.mutable_vec()->add_data() = std::move(kwargs);
+  ++batch_size_;
+  num_to_wait_.DecrementCount();
+  return p.get_future();
 }
 
 void DefineTask(py::module& m) {
-  py::class_<Task, TaskBase, std::shared_ptr<Task>>(m, "Task");
+  py::class_<Task, std::shared_ptr<Task>>(m, "Task")
+      .def("args", &Task::Args)
+      .def("kwargs", &Task::Kwargs)
+      .def("set_return_value", &Task::SetReturnValue);
 }
 
 void DefineBatchedTask(py::module& m) {
-  py::class_<BatchedTask, TaskBase, std::shared_ptr<BatchedTask>>(m,
-                                                                  "BatchedTask")
-      .def("__len__", &BatchedTask::BatchSize)
+  py::class_<BatchedTask, Task, std::shared_ptr<BatchedTask>>(m, "BatchedTask")
+      .def("__len__", &BatchedTask::batch_size)
       .def_property_readonly("capacity", &BatchedTask::capacity)
-      .def_property_readonly("batch_size", &BatchedTask::BatchSize)
+      .def_property_readonly("batch_size", &BatchedTask::batch_size)
       .def("empty", &BatchedTask::Empty)
       .def("full", &BatchedTask::Full);
 }

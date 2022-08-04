@@ -64,26 +64,31 @@ class DownstreamModel(remote.Remote):
         return self.wrapped(*args, **kwargs)
 
     def pull(self) -> None:
-        state_dict = self.client.sync(self.server_name,
-                                      self.remote_method_name("pull"))
+        # state_dict = self.client.sync(self.server_name,
+        #                               self.remote_method_name("pull"))
+        state_dict = self.client.rpc(self.remote_method_name("pull"))
         self.wrapped.load_state_dict(state_dict)
 
     async def async_pull(self) -> None:
-        state_dict = await self.client.async_(self.server_name,
-                                              self.remote_method_name("pull"))
+        # state_dict = await self.client.async_(self.server_name,
+        #                                       self.remote_method_name("pull"))
+        state_dict = await self.client.async_rpc(self.remote_method_name("pull")
+                                                )
         self.wrapped.load_state_dict(state_dict)
 
     def push(self) -> None:
         state_dict = self.wrapped.state_dict()
         state_dict = nested_utils.map_nested(lambda x: x.cpu(), state_dict)
-        self.client.sync(self.server_name, self.remote_method_name("push"),
-                         state_dict)
+        # self.client.sync(self.server_name, self.remote_method_name("push"),
+        #                  state_dict)
+        self.client.rpc(self.remote_method_name("push"), state_dict)
 
     async def async_push(self) -> None:
         state_dict = self.wrapped.state_dict()
         state_dict = nested_utils.map_nested(lambda x: x.cpu(), state_dict)
-        await self.client.async_(self.server_name,
-                                 self.remote_method_name("push"), state_dict)
+        # await self.client.async_(self.server_name,
+        #                          self.remote_method_name("push"), state_dict)
+        await self.client.async_rpc(self.remote_method_name("push"), state_dict)
 
     def _bind(self) -> None:
         pass
