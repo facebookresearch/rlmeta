@@ -177,20 +177,20 @@ class ApexDQNAgent(Agent):
 
     def make_replay(self) -> Optional[List[NestedTensor]]:
         trajectory_len = len(self.trajectory)
-        if trajectory_len <= self.multi_step:
+        if trajectory_len < 2:
             return None
 
         replay = []
         append = replay.append
-        for i in range(0, trajectory_len - self.multi_step):
+        for i in range(0, trajectory_len - 1):
             cur = self.trajectory[i]
-            nxt = self.trajectory[i + self.multi_step]
+            nxt = self.trajectory[min(i + self.multi_step, trajectory_len - 1)]
             obs = cur["obs"]
             act = cur["action"]
             next_obs = nxt["obs"]
             done = nxt["done"]
             reward = 0.0
-            for j in range(self.multi_step):
+            for j in range(min(self.multi_step, trajectory_len - 1 - i)):
                 reward += (self.gamma**j) * self.trajectory[i + j]["reward"]
             append({
                 "obs": obs,
