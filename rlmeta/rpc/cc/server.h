@@ -15,6 +15,7 @@
 #include <thread>
 #include <tuple>
 #include <unordered_map>
+#include <utility>
 
 #include "rlmeta/rpc/cc/computation_queue.h"
 #include "rlmeta/rpc/cc/task.h"
@@ -27,12 +28,16 @@ namespace rlmeta {
 namespace rpc {
 
 using PyFunc = std::function<NestedData(const NestedData&, const NestedData&)>;
-using PyFuncDict = std::unordered_map<std::string, PyFunc>;
+using PyFuncRvalue = std::function<NestedData(NestedData&&, NestedData&&)>;
+using PyFuncDict =
+    std::unordered_map<std::string, std::pair<PyFunc, PyFuncRvalue>>;
 
 class ServiceImpl final : public Rpc::Service {
  public:
-  grpc::Status Register(const std::string& func_name, PyFunc&& func_impl) {
-    functions_.emplace(func_name, std::move(func_impl));
+  grpc::Status Register(const std::string& func_name, PyFunc&& func_impl,
+                        PyFuncRvalue&& func_rvalue_impl) {
+    functions_.emplace(func_name, std::make_pair(std::move(func_impl),
+                                                 std::move(func_rvalue_impl)));
     return grpc::Status::OK;
   }
 
@@ -40,6 +45,10 @@ class ServiceImpl final : public Rpc::Service {
   grpc::Status RemoteCall(grpc::ServerContext* context,
                           const RpcRequest* request,
                           RpcResponse* response) override;
+
+  grpc::Status PyRemoteCall(grpc::ServerContext* context,
+                            const PyRpcRequest* request,
+                            PyRpcResponse* response) override;
 
   PyFuncDict functions_;
 };

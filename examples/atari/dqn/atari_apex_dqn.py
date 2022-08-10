@@ -6,6 +6,7 @@
 import copy
 import logging
 import time
+import os
 
 import hydra
 
@@ -63,8 +64,10 @@ def main(cfg):
                                      timeout=120)
     t_rb = make_remote_replay_buffer(rb, r_server)
 
-    env_fac = gym_wrappers.AtariWrapperFactory(
-        cfg.env, max_episode_steps=cfg.max_episode_steps)
+    t_env_fac = gym_wrappers.AtariWrapperFactory(
+        cfg.env, max_episode_steps=cfg.max_episode_steps, clip_rewards=True)
+    e_env_fac = gym_wrappers.AtariWrapperFactory(
+        cfg.env, max_episode_steps=cfg.max_episode_steps, clip_rewards=False)
 
     agent = ApexDQNAgent(a_model,
                          replay_buffer=a_rb,
@@ -81,7 +84,7 @@ def main(cfg):
                                       replay_buffer=t_rb)
     e_agent_fac = ApexDQNAgentFactory(e_model, ConstantEpsFunc(cfg.eval_eps))
 
-    t_loop = ParallelLoop(env_fac,
+    t_loop = ParallelLoop(t_env_fac,
                           t_agent_fac,
                           t_ctrl,
                           running_phase=Phase.TRAIN,
@@ -89,7 +92,7 @@ def main(cfg):
                           num_rollouts=cfg.num_train_rollouts,
                           num_workers=cfg.num_train_workers,
                           seed=cfg.train_seed)
-    e_loop = ParallelLoop(env_fac,
+    e_loop = ParallelLoop(e_env_fac,
                           e_agent_fac,
                           e_ctrl,
                           running_phase=Phase.EVAL,
@@ -133,4 +136,8 @@ def main(cfg):
 
 if __name__ == "__main__":
     mp.set_start_method("spawn")
+    if os.environ.get('https_proxy'):
+        del os.environ['https_proxy']
+    if os.environ.get('http_proxy'):
+        del os.environ['http_proxy']
     main()

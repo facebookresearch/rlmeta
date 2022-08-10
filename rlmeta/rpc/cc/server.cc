@@ -19,8 +19,21 @@ namespace rpc {
 grpc::Status ServiceImpl::RemoteCall(grpc::ServerContext* /* context */,
                                      const RpcRequest* request,
                                      RpcResponse* response) {
-  auto& func = functions_.at(request->function());
+  auto& func = functions_.at(request->function()).first;
   *response->mutable_return_value() = func(request->args(), request->kwargs());
+  return grpc::Status::OK;
+}
+
+grpc::Status ServiceImpl::PyRemoteCall(grpc::ServerContext* /* context */,
+                                       const PyRpcRequest* request,
+                                       PyRpcResponse* response) {
+  NestedData args;
+  NestedData kwargs;
+  args.ParseFromString(request->args());
+  kwargs.ParseFromString(request->kwargs());
+  auto& func = functions_.at(request->function()).second;
+  NestedData ret = func(std::move(args), std::move(kwargs));
+  ret.SerializeToString(response->mutable_return_value());
   return grpc::Status::OK;
 }
 
@@ -48,8 +61,12 @@ std::shared_ptr<ComputationQueue> Server::RegisterQueue(
     ret = std::make_shared<BatchedComputationQueue>(batch_size);
   }
   service_.Register(
-      func_name, [que = ret](const NestedData& args, const NestedData& kwargs) {
+      func_name,
+      [que = ret](const NestedData& args, const NestedData& kwargs) {
         return que->Put(args, kwargs).get();
+      },
+      [que = ret](NestedData&& args, NestedData&& kwargs) {
+        return que->Put(std::move(args), std::move(kwargs)).get();
       });
   return ret;
 }

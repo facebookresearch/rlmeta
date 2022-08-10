@@ -9,12 +9,10 @@ import threading
 from typing import Any, Callable, Optional, NoReturn
 
 import rlmeta.utils.data_utils as data_utils
-
-import _rlmeta_extension.rpc as rpc
-import _rlmeta_extension.rpc.rpc_utils as rpc_utils
+import _rlmeta_extension.rpc as _rpc
 
 
-class Server(rpc.Server):
+class Server(_rpc.Server):
 
     def __init__(self, addr: str):
         super().__init__(addr)
@@ -50,7 +48,7 @@ class Server(rpc.Server):
 
         print("rpc.Server stopped")
 
-    def _process(self, queue: rpc.ComputationQueue,
+    def _process(self, queue: _rpc.ComputationQueue,
                  func: Callable[..., Any]) -> NoReturn:
         try:
             while True:
@@ -61,11 +59,11 @@ class Server(rpc.Server):
         except StopIteration:
             return
 
-    def _wrap_func(self, task: rpc.Task, func: Callable[..., Any]) -> None:
+    def _wrap_func(self, task: _rpc.Task, func: Callable[..., Any]) -> None:
         batch_size = None
         args = task.args()
         kwargs = task.kwargs()
-        if isinstance(task, rpc.BatchedTask):
+        if isinstance(task, _rpc.BatchedTask):
             batch_size = task.batch_size
             args = data_utils.stack_fields(args)
             kwargs = data_utils.stack_fields(kwargs)

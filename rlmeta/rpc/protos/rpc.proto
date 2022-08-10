@@ -9,10 +9,7 @@ package rlmeta.rpc;
 
 service Rpc {
   rpc RemoteCall(RpcRequest) returns (RpcResponse) {}
-}
-
-message Error {
-  optional string message = 1;
+  rpc PyRemoteCall(PyRpcRequest) returns (PyRpcResponse) {}
 }
 
 message RpcRequest {
@@ -26,6 +23,20 @@ message RpcResponse {
   optional Error error = 2;
 }
 
+message PyRpcRequest {
+  optional string function = 1;
+  optional bytes args = 2;
+  optional bytes kwargs = 3;
+}
+
+message PyRpcResponse {
+  optional bytes return_value = 1;
+  optional string error = 2;
+}
+
+message Error {
+  optional string msg = 1;
+}
 
 message TensorProto {
   enum TensorType {

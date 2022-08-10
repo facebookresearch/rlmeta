@@ -45,9 +45,10 @@ class DownstreamModel(remote.Remote):
                  server_name: str,
                  server_addr: str,
                  name: Optional[str] = None,
-                 timeout: float = 60) -> None:
+                 timeout: float = 60,
+                 py_aio_client: bool = True) -> None:
         self._wrapped = model
-        self._reset(server_name, server_addr, name, timeout)
+        self._reset(server_name, server_addr, name, timeout, py_aio_client)
 
     # TODO: Find a better way to implement this
     def __getattribute__(self, attr: str) -> Any:

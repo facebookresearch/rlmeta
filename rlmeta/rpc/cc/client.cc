@@ -30,22 +30,30 @@ void Client::Connect(const std::string& addr, int64_t timeout) {
   if (!channel_->WaitForConnected(deadline)) {
     std::cerr << "[Client::connect] timeout" << std::endl;
   }
-  thread_ = std::make_unique<std::thread>(&Client::AsyncCompleteRpc, this);
   connected_ = true;
 }
 
 void Client::Disconnect() {
   if (connected_) {
     connected_ = false;
-    cq_.Shutdown();
-    thread_->join();
-    thread_.reset();
   }
 }
 
 py::object Client::Rpc(const std::string& func, const py::args& args,
                        const py::kwargs& kwargs) {
-  return RpcFuture(func, args, kwargs).Get();
+  assert(connected_);
+  RpcRequest request;
+  request.set_function(func);
+  *request.mutable_args() = rpc_utils::PythonToNestedData(args);
+  *request.mutable_kwargs() = rpc_utils::PythonToNestedData(kwargs);
+
+  NestedData ret;
+  {
+    py::gil_scoped_release release;
+    ret = RpcImpl(std::move(request));
+  }
+
+  return rpc_utils::NestedDataToPython(std::move(ret));
 }
 
 rlmeta::rpc::RpcFuture Client::RpcFuture(const std::string& func,
@@ -58,25 +66,18 @@ rlmeta::rpc::RpcFuture Client::RpcFuture(const std::string& func,
   *request.mutable_kwargs() = rpc_utils::PythonToNestedData(kwargs);
 
   py::gil_scoped_release release;
-  AsyncClientCall* call = new AsyncClientCall();
-  rlmeta::rpc::RpcFuture fut = call->promise.get_future();
-  call->response_reader =
-      stub_->PrepareAsyncRemoteCall(&call->context, request, &cq_);
-  call->response_reader->StartCall();
-  call->response_reader->Finish(&call->response, &call->status, (void*)call);
+  rlmeta::rpc::RpcFuture fut =
+      std::async(&Client::RpcImpl, this, std::move(request));
   return fut;
 }
 
-void Client::AsyncCompleteRpc() {
-  void* got_tag;
-  bool ok = false;
-  while (cq_.Next(&got_tag, &ok)) {
-    std::unique_ptr<AsyncClientCall> call(
-        static_cast<AsyncClientCall*>(got_tag));
-    GPR_ASSERT(ok);
-    assert(call->status.ok());
-    call->promise.set_value(std::move(*call->response.mutable_return_value()));
-  }
+NestedData Client::RpcImpl(RpcRequest&& request) {
+  RpcResponse response;
+  grpc::ClientContext context;
+  grpc::Status status = stub_->RemoteCall(&context, request, &response);
+  assert(status.ok());
+  NestedData ret = std::move(*response.mutable_return_value());
+  return ret;
 }
 
 void DefineClient(py::module& m) {

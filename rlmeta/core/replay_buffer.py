@@ -16,6 +16,7 @@ import torch
 from rich.console import Console
 
 import rlmeta.core.remote as remote
+import rlmeta.rpc as rpc
 import rlmeta.utils.data_utils as data_utils
 import rlmeta.utils.nested_utils as nested_utils
 
@@ -172,9 +173,10 @@ class PrioritizedReplayBuffer(ReplayBuffer):
     def sample(
         self, batch_size: int
     ) -> Tuple[NestedTensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        data, weight, index, timestamp = self._sample(batch_size)
-        return data, weight, torch.from_numpy(index), torch.from_numpy(
-            timestamp)
+        # data, weight, index, timestamp = self._sample(batch_size)
+        # return data, weight, torch.from_numpy(index), torch.from_numpy(
+        #     timestamp)
+        return self._sample(batch_size)
 
     @remote.remote_method(batch_size=None)
     def update_priority(self,
@@ -257,7 +259,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             self._init_priority(index)
         else:
             self._update_priority(index, priority)
-        self._update_timestamp(index)
+        # self._update_timestamp(index)
+        self._timestamps.update(index)
         return index
 
     def _extend(self,
@@ -280,7 +283,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         index = self._sum_tree.scan_lower_bound(mass)
         data, weight = self.__getitem__(index)
         timestamp = self._timestamps[index]
-        return data, weight, index, timestamp
+        return index, data, weight, timestamp
 
 
 class RemoteReplayBuffer(remote.Remote):
@@ -292,7 +295,13 @@ class RemoteReplayBuffer(remote.Remote):
                  name: Optional[str] = None,
                  prefetch: int = 0,
                  timeout: float = 60) -> None:
-        super().__init__(target, server_name, server_addr, name, timeout)
+        # Disable python asyncio client for large data transmission.
+        super().__init__(target,
+                         server_name,
+                         server_addr,
+                         name,
+                         timeout,
+                         py_aio_client=False)
         self._server_name = server_name
         self._server_addr = server_addr
 
@@ -306,6 +315,16 @@ class RemoteReplayBuffer(remote.Remote):
     @property
     def prefetch(self) -> Optional[int]:
         return self._prefetch
+
+    def connect(self) -> None:
+        if self._connected:
+            return
+
+        self._client = rpc.Client()
+        self._client.connect(self._server_addr)
+
+        self._bind()
+        self._connected = True
 
     def sample(
         self, batch_size: int

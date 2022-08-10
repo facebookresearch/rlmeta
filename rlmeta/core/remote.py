@@ -55,14 +55,15 @@ class Remote:
                  server_name: str,
                  server_addr: str,
                  name: Optional[str] = None,
-                 timeout: float = 60) -> None:
+                 timeout: float = 60,
+                 py_aio_client: bool = True) -> None:
         self._target_repr = repr(target)
         self._server_name = server_name
         self._server_addr = server_addr
 
         self._remote_methods = target.remote_methods
         self._identifier = target.identifier
-        self._reset(server_name, server_addr, name, timeout)
+        self._reset(server_name, server_addr, name, timeout, py_aio_client)
         self._client_methods = {}
 
     # TODO: Find a better way to implement this
@@ -126,7 +127,7 @@ class Remote:
         # self._client.set_timeout(self._timeout)
         # self._client.connect(self._server_addr)
 
-        self._client = rpc.Client()
+        self._client = rpc.Client(self._py_aio_client)
         self._client.connect(self._server_addr)
 
         self._bind()
@@ -136,13 +137,15 @@ class Remote:
                server_name: str,
                server_addr: str,
                name: Optional[str] = None,
-               timeout: float = 60) -> None:
+               timeout: float = 60,
+               py_aio_client: bool = True) -> None:
         if name is None:
             name = generate_random_name()
         self._server_name = server_name
         self._server_addr = server_addr
         self._name = name
         self._timeout = timeout
+        self._py_aio_client = py_aio_client
         self._client = None
         self._connected = False
 

@@ -7,6 +7,8 @@ import time
 
 from typing import Callable, Dict, List, Optional, Sequence
 
+import numpy as np
+
 import torch
 import torch.nn as nn
 
@@ -138,10 +140,10 @@ class ApexDQNAgent(Agent):
         console.log(f"Training for num_steps = {num_steps}")
         for _ in track(range(num_steps), description="Training..."):
             t0 = time.perf_counter()
-            batch, weight, index, timestamp = self.replay_buffer.sample(
+            index, batch, weight, timestamp = self.replay_buffer.sample(
                 self.batch_size)
             t1 = time.perf_counter()
-            step_stats = self.train_step(batch, weight, index, timestamp)
+            step_stats = self.train_step(index, batch, weight, timestamp)
             t2 = time.perf_counter()
             time_stats = {
                 "sample_data_time/ms": (t1 - t0) * 1000.0,
@@ -177,20 +179,21 @@ class ApexDQNAgent(Agent):
 
     def make_replay(self) -> Optional[List[NestedTensor]]:
         trajectory_len = len(self.trajectory)
-        if trajectory_len <= self.multi_step:
+        if trajectory_len <= 2:
             return None
 
         replay = []
         append = replay.append
-        for i in range(0, trajectory_len - self.multi_step):
+        # for i in range(0, trajectory_len - self.multi_step):
+        for i in range(0, trajectory_len - 1):
             cur = self.trajectory[i]
-            nxt = self.trajectory[i + self.multi_step]
+            nxt = self.trajectory[min(i + self.multi_step, trajectory_len - 1)]
             obs = cur["obs"]
             act = cur["action"]
             next_obs = nxt["obs"]
             done = nxt["done"]
             reward = 0.0
-            for j in range(self.multi_step):
+            for j in range(min(self.multi_step, trajectory_len - 1 - i)):
                 reward += (self.gamma**j) * self.trajectory[i + j]["reward"]
             append({
                 "obs": obs,
@@ -202,9 +205,9 @@ class ApexDQNAgent(Agent):
 
         return replay
 
-    def train_step(self, batch: NestedTensor, weight: torch.Tensor,
-                   index: torch.Tensor,
-                   timestamp: torch.Tensor) -> Dict[str, float]:
+    def train_step(self, index: np.ndarray, batch: NestedTensor,
+                   weight: torch.Tensor,
+                   timestamp: np.ndarray) -> Dict[str, float]:
         device = next(self.model.parameters()).device
         batch = nested_utils.map_nested(lambda x: x.to(device), batch)
         self.optimizer.zero_grad()
