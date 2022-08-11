@@ -136,8 +136,4 @@ def main(cfg):
 
 if __name__ == "__main__":
     mp.set_start_method("spawn")
-    if os.environ.get('https_proxy'):
-        del os.environ['https_proxy']
-    if os.environ.get('http_proxy'):
-        del os.environ['http_proxy']
     main()
