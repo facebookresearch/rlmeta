@@ -296,12 +296,7 @@ class RemoteReplayBuffer(remote.Remote):
                  prefetch: int = 0,
                  timeout: float = 60) -> None:
         # Disable python asyncio client for large data transmission.
-        super().__init__(target,
-                         server_name,
-                         server_addr,
-                         name,
-                         timeout,
-                         py_aio_client=False)
+        super().__init__(target, server_name, server_addr, name, timeout)
         self._server_name = server_name
         self._server_addr = server_addr
 
