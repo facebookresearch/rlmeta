@@ -1,8 +1,9 @@
+grpcio==1.47.0
 gym
 hydra-core
 matplotlib
 numpy
 opencv-python
+rich
 tabulate
 torch>=1.5.1
-rich
