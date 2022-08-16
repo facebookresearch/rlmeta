@@ -23,6 +23,17 @@ class StatsItem:
         if val is not None:
             self.add(val)
 
+    @classmethod
+    def from_dict(cls, data: Dict[str, float]) -> StatsItem:
+        ret = cls(key=data.get("key", None))
+        ret._m0 = data.get("count", 0)
+        ret._m1 = data.get("mean", 0.0)
+        std = data.get("std", 0.0)
+        ret._m2 = std * std * ret._m0
+        ret._min_val = data.get("min", float("inf"))
+        ret._max_val = data.get("max", float("-inf"))
+        return ret
+
     @property
     def key(self) -> str:
         return self._key
@@ -84,6 +95,12 @@ class StatsDict:
     def __getitem__(self, key: str) -> StatsItem:
         return self._dict[key]
 
+    @classmethod
+    def from_dict(cls, data: Dict[str, Dict[str, float]]) -> StatsDict:
+        ret = cls()
+        ret._dict = {k: StatsItem.from_dict(v) for k, v in data.items()}
+        return ret
+
     def reset(self):
         self._dict.clear()
 
@@ -100,7 +117,7 @@ class StatsDict:
     def update(self, stats: StatsDict) -> None:
         self._dict.update(stats._dict)
 
-    def dict(self) -> Dict[str, float]:
+    def dict(self) -> Dict[str, Dict[str, float]]:
         return {k: v.dict() for k, v in self._dict.items()}
 
     def json(self, info: Optional[str] = None, **kwargs) -> str:

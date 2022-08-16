@@ -4,15 +4,19 @@
 # LICENSE file in the root directory of this source tree.
 
 import collections
-import time
+import concurrent.futures
 import logging
+import time
 
 from typing import Callable, Optional, Sequence, Tuple, Union
-from rich.console import Console
+
 import numpy as np
 import torch
 
+from rich.console import Console
+
 import rlmeta.core.remote as remote
+import rlmeta.rpc as rpc
 import rlmeta.utils.data_utils as data_utils
 import rlmeta.utils.nested_utils as nested_utils
 
@@ -117,7 +121,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
         self._priority_type = priority_type
         self._sum_tree = SumSegmentTree(capacity, dtype=priority_type)
-        self._min_tree = MinSegmentTree(capacity, dtype=priority_type)
+        # self._min_tree = MinSegmentTree(capacity, dtype=priority_type)
         self._max_priority = 1.0
 
         self._timestamps = TimestampManager(capacity)
@@ -169,9 +173,10 @@ class PrioritizedReplayBuffer(ReplayBuffer):
     def sample(
         self, batch_size: int
     ) -> Tuple[NestedTensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        data, weight, index, timestamp = self._sample(batch_size)
-        return data, weight, torch.from_numpy(index), torch.from_numpy(
-            timestamp)
+        # data, weight, index, timestamp = self._sample(batch_size)
+        # return data, weight, torch.from_numpy(index), torch.from_numpy(
+        #     timestamp)
+        return self._sample(batch_size)
 
     @remote.remote_method(batch_size=None)
     def update_priority(self,
@@ -196,7 +201,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
     def _init_priority(self, index) -> None:
         priority = self._max_priority**self.alpha
         self._sum_tree[index] = priority
-        self._min_tree[index] = priority
+        # self._min_tree[index] = priority
 
     def _update_priority(
             self,
@@ -225,17 +230,18 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         if isinstance(index, int):
             if mask is None or mask:
                 self._sum_tree[index] = priority
-                self._min_tree[index] = priority
+                # self._min_tree[index] = priority
         else:
             self._sum_tree.update(index, priority, mask)
-            self._min_tree.update(index, priority, mask)
+            # self._min_tree.update(index, priority, mask)
 
     def _compute_weight(
             self, index: Union[int, Tensor]) -> Union[float, torch.Tensor]:
         p = self._sum_tree[index]
         if isinstance(p, np.ndarray):
             p = torch.from_numpy(p)
-        p_min = self._min_tree.query(0, self.capacity)
+        # p_min = self._min_tree.query(0, self.capacity)
+        p_min = p.min()
 
         # Importance sampling weight formula:
         #   w_i = (p_i / sum(p) * N) ^ (-beta)
@@ -254,7 +260,8 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             self._init_priority(index)
         else:
             self._update_priority(index, priority)
-        self._update_timestamp(index)
+        # self._update_timestamp(index)
+        self._timestamps.update(index)
         return index
 
     def _extend(self,
@@ -277,7 +284,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         index = self._sum_tree.scan_lower_bound(mass)
         data, weight = self.__getitem__(index)
         timestamp = self._timestamps[index]
-        return data, weight, index, timestamp
+        return index, data, weight, timestamp
 
 
 class RemoteReplayBuffer(remote.Remote):
@@ -289,11 +296,18 @@ class RemoteReplayBuffer(remote.Remote):
                  name: Optional[str] = None,
                  prefetch: int = 0,
                  timeout: float = 60) -> None:
-        super().__init__(target, server_name, server_addr, name, timeout)
-        self._prefetch = prefetch
-        self._futures = collections.deque()
+        # Disable python asyncio client for large data transmission.
+        super().__init__(target,
+                         server_name,
+                         server_addr,
+                         name,
+                         timeout,
+                         py_aio_client=False)
         self._server_name = server_name
         self._server_addr = server_addr
+
+        self._prefetch = prefetch
+        self._futures = collections.deque()
 
     def __repr__(self):
         return (f"RemoteReplayBuffer(server_name={self._server_name}, " +
@@ -303,21 +317,37 @@ class RemoteReplayBuffer(remote.Remote):
     def prefetch(self) -> Optional[int]:
         return self._prefetch
 
+    # def connect(self) -> None:
+    #     if self._connected:
+    #         return
+    #
+    #     self._client = rpc.Client()
+    #     self._client.connect(self._server_addr)
+    #
+    #     self._bind()
+    #     self._connected = True
+
     def sample(
         self, batch_size: int
     ) -> Union[NestedTensor, Tuple[NestedTensor, torch.Tensor, torch.Tensor,
                                    torch.Tensor]]:
         if len(self._futures) > 0:
-            ret = self._futures.popleft().result()
+            # ret = self._futures.popleft().result()
+            ret = self._futures.popleft().get()
         else:
-            ret = self.client.sync(self.server_name,
-                                   self.remote_method_name("sample"),
-                                   batch_size)
+            # ret = self.client.sync(self.server_name,
+            #                        self.remote_method_name("sample"),
+            #                        batch_size)
+            ret = self.client.rpc(self.remote_method_name("sample"), batch_size)
 
-        while len(self._futures) < self.prefetch:
-            fut = self.client.async_(self.server_name,
-                                     self.remote_method_name("sample"),
-                                     batch_size)
+        # while len(self._futures) < self.prefetch:
+        #     fut = self.client.async_(self.server_name,
+        #                              self.remote_method_name("sample"),
+        #                              batch_size)
+        #     self._futures.append(fut)
+        while len(self._futures) < self._prefetch:
+            fut = self.client.rpc_future(self.remote_method_name("sample"),
+                                         batch_size)
             self._futures.append(fut)
 
         return ret
@@ -329,14 +359,21 @@ class RemoteReplayBuffer(remote.Remote):
         if len(self._futures) > 0:
             ret = await self._futures.popleft()
         else:
-            ret = await self.client.async_(self.server_name,
-                                           self.remote_method_name("sample"),
-                                           batch_size)
+            # ret = await self.client.async_(self.server_name,
+            #                                self.remote_method_name("sample"),
+            #                                batch_size)
+            ret = await self.client.async_rpc(self.remote_method_name("sample"),
+                                              batch_size)
 
-        while len(self._futures) < self.prefetch:
-            fut = self.client.async_(self.server_name,
-                                     self.remote_method_name("sample"),
-                                     batch_size)
+        # while len(self._futures) < self.prefetch:
+        #     fut = self.client.async_(self.server_name,
+        #                              self.remote_method_name("sample"),
+        #                              batch_size)
+        #     self._futures.append(fut)
+
+        while len(self._futures) < self._prefetch:
+            fut = self.client.async_rpc(self.remote_method_name("sample"),
+                                        batch_size)
             self._futures.append(fut)
 
         return ret

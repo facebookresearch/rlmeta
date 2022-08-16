@@ -10,7 +10,8 @@ import functools
 
 from typing import Any, Callable, List, Optional
 
-import moolib
+# import moolib
+import rlmeta.rpc as rpc
 
 from rlmeta.core.launchable import Launchable
 from rlmeta.utils.moolib_utils import generate_random_name
@@ -54,14 +55,15 @@ class Remote:
                  server_name: str,
                  server_addr: str,
                  name: Optional[str] = None,
-                 timeout: float = 60) -> None:
+                 timeout: float = 60,
+                 py_aio_client: bool = True) -> None:
         self._target_repr = repr(target)
         self._server_name = server_name
         self._server_addr = server_addr
 
         self._remote_methods = target.remote_methods
         self._identifier = target.identifier
-        self._reset(server_name, server_addr, name, timeout)
+        self._reset(server_name, server_addr, name, timeout, py_aio_client)
         self._client_methods = {}
 
     # TODO: Find a better way to implement this
@@ -97,8 +99,11 @@ class Remote:
     def server_addr(self) -> str:
         return self._server_addr
 
+    # @property
+    # def client(self) -> Optional[moolib.Client]:
+    #     return self._client
     @property
-    def client(self) -> Optional[moolib.Client]:
+    def client(self) -> Optional[rpc.Client]:
         return self._client
 
     @property
@@ -116,11 +121,15 @@ class Remote:
     def connect(self) -> None:
         if self._connected:
             return
-        self._client = moolib.Rpc()
-        self._client.set_transports(["uv"])
-        self._client.set_name(self._name)
-        self._client.set_timeout(self._timeout)
+        # self._client = moolib.Rpc()
+        # self._client.set_transports(["uv"])
+        # self._client.set_name(self._name)
+        # self._client.set_timeout(self._timeout)
+        # self._client.connect(self._server_addr)
+
+        self._client = rpc.Client(self._py_aio_client)
         self._client.connect(self._server_addr)
+
         self._bind()
         self._connected = True
 
@@ -128,24 +137,31 @@ class Remote:
                server_name: str,
                server_addr: str,
                name: Optional[str] = None,
-               timeout: float = 60) -> None:
+               timeout: float = 60,
+               py_aio_client: bool = True) -> None:
         if name is None:
             name = generate_random_name()
         self._server_name = server_name
         self._server_addr = server_addr
         self._name = name
         self._timeout = timeout
+        self._py_aio_client = py_aio_client
         self._client = None
         self._connected = False
 
     def _bind(self) -> None:
         for method in self._remote_methods:
+            # self._client_methods[method] = functools.partial(
+            #     self.client.sync, self.server_name,
+            #     self.remote_method_name(method))
+            # self._client_methods["async_" + method] = functools.partial(
+            #     self.client.async_, self.server_name,
+            #     self.remote_method_name(method))
+
             self._client_methods[method] = functools.partial(
-                self.client.sync, self.server_name,
-                self.remote_method_name(method))
+                self.client.rpc, self.remote_method_name(method))
             self._client_methods["async_" + method] = functools.partial(
-                self.client.async_, self.server_name,
-                self.remote_method_name(method))
+                self.client.async_rpc, self.remote_method_name(method))
 
 
 def remote_method(batch_size: Optional[int] = None) -> Callable[..., Any]:

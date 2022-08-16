@@ -7,6 +7,8 @@ import time
 
 from typing import Callable, Dict, List, Optional, Sequence
 
+import numpy as np
+
 import torch
 import torch.nn as nn
 
@@ -138,10 +140,10 @@ class ApexDQNAgent(Agent):
         console.log(f"Training for num_steps = {num_steps}")
         for _ in track(range(num_steps), description="Training..."):
             t0 = time.perf_counter()
-            batch, weight, index, timestamp = self.replay_buffer.sample(
+            index, batch, weight, timestamp = self.replay_buffer.sample(
                 self.batch_size)
             t1 = time.perf_counter()
-            step_stats = self.train_step(batch, weight, index, timestamp)
+            step_stats = self.train_step(index, batch, weight, timestamp)
             t2 = time.perf_counter()
             time_stats = {
                 "sample_data_time/ms": (t1 - t0) * 1000.0,
@@ -163,7 +165,7 @@ class ApexDQNAgent(Agent):
                     for m in self._additional_models_to_update:
                         m.push()
 
-        episode_stats = self.controller.get_stats()
+        episode_stats = StatsDict.from_dict(self.controller.get_stats())
         stats.update(episode_stats)
 
         return stats
@@ -172,7 +174,7 @@ class ApexDQNAgent(Agent):
         self.controller.set_phase(Phase.EVAL, limit=num_episodes, reset=True)
         while self.controller.get_count() < num_episodes:
             time.sleep(1)
-        stats = self.controller.get_stats()
+        stats = StatsDict.from_dict(self.controller.get_stats())
         return stats
 
     def make_replay(self) -> Optional[List[NestedTensor]]:
@@ -202,9 +204,9 @@ class ApexDQNAgent(Agent):
 
         return replay
 
-    def train_step(self, batch: NestedTensor, weight: torch.Tensor,
-                   index: torch.Tensor,
-                   timestamp: torch.Tensor) -> Dict[str, float]:
+    def train_step(self, index: np.ndarray, batch: NestedTensor,
+                   weight: torch.Tensor,
+                   timestamp: np.ndarray) -> Dict[str, float]:
         device = next(self.model.parameters()).device
         batch = nested_utils.map_nested(lambda x: x.to(device), batch)
         self.optimizer.zero_grad()

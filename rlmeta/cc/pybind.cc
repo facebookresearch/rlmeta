@@ -9,6 +9,12 @@
 #include "rlmeta/cc/nested_utils.h"
 #include "rlmeta/cc/segment_tree.h"
 #include "rlmeta/cc/timestamp_manager.h"
+#include "rlmeta/rpc/cc/client.h"
+#include "rlmeta/rpc/cc/computation_queue.h"
+#include "rlmeta/rpc/cc/rpc_future.h"
+#include "rlmeta/rpc/cc/rpc_utils.h"
+#include "rlmeta/rpc/cc/server.h"
+#include "rlmeta/rpc/cc/task.h"
 
 namespace py = pybind11;
 
@@ -21,8 +27,26 @@ PYBIND11_MODULE(_rlmeta_extension, m) {
   rlmeta::DefineMinSegmentTree<double>("Fp64", m);
 
   rlmeta::DefineCircularBuffer(m);
-  rlmeta::DefineNestedUtils(m);
   rlmeta::DefineTimestampManager(m);
+
+  py::module nested_utils = m.def_submodule(
+      "nested_utils", "A submodule of \"_rlmeta_extension\" for nested_utils");
+  rlmeta::DefineNestedUtils(nested_utils);
+
+  py::module rpc =
+      m.def_submodule("rpc", "A submodule of \"_rlmeta_extension\" for RPC");
+  // rlmeta::rpc::DefineTaskBase(rpc);
+  rlmeta::rpc::DefineTask(rpc);
+  rlmeta::rpc::DefineBatchedTask(rpc);
+  rlmeta::rpc::DefineComputationQueue(rpc);
+  rlmeta::rpc::DefineBatchedComputationQueue(rpc);
+  rlmeta::rpc::DefineServer(rpc);
+  rlmeta::rpc::DefineClient(rpc);
+  rlmeta::rpc::DefineRpcFuture(rpc);
+
+  py::module rpc_utils = rpc.def_submodule(
+      "rpc_utils", "A submodule of \"_rlmeta_extension.rpc\" for rpc_utils");
+  rlmeta::rpc::DefineRpcUtils(rpc_utils);
 }
 
 }  // namespace

@@ -1,9 +1,9 @@
+grpcio==1.47.0
 gym
 hydra-core
 matplotlib
-moolib@git+https://github.com/facebookresearch/moolib
 numpy
 opencv-python
+rich
 tabulate
 torch>=1.5.1
-rich

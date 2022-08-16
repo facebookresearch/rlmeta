@@ -65,8 +65,8 @@ class Controller(remote.Remotable):
         return self.count
 
     @remote.remote_method(batch_size=None)
-    def get_stats(self) -> StatsDict:
-        return self.stats
+    def get_stats(self) -> Dict[str, Dict[str, float]]:
+        return self.stats.dict()
 
     @remote.remote_method(batch_size=None)
     def add_episode(self, phase: Phase, stats: Dict[str, float]) -> None:

@@ -6,7 +6,6 @@
 #include "rlmeta/cc/nested_utils.h"
 
 #include <utility>
-#include <vector>
 
 namespace rlmeta {
 
@@ -34,8 +33,10 @@ void VisitNestedImpl(Function func, const py::object& obj) {
 
   if (py::isinstance<py::dict>(obj)) {
     const py::dict src = py::reinterpret_borrow<py::dict>(obj);
-    for (const auto [k, v] : src) {
-      VisitNestedImpl(func, py::reinterpret_borrow<py::object>(v));
+    const std::vector<std::string> keys = SortedKeys(src);
+    for (const std::string& k : keys) {
+      VisitNestedImpl(func,
+                      py::reinterpret_borrow<py::object>(src[py::str(k)]));
     }
     return;
   }
@@ -68,8 +69,11 @@ py::object MapNestedImpl(Function func, const py::object& obj) {
   if (py::isinstance<py::dict>(obj)) {
     const py::dict src = py::reinterpret_borrow<py::dict>(obj);
     py::dict dst;
-    for (const auto [k, v] : src) {
-      dst[k] = MapNestedImpl(func, py::reinterpret_borrow<py::object>(v));
+    const std::vector<std::string> keys = SortedKeys(src);
+    for (const std::string& k : keys) {
+      const py::str key = py::str(k);
+      dst[key] =
+          MapNestedImpl(func, py::reinterpret_borrow<py::object>(src[key]));
     }
     return std::move(dst);
   }
@@ -150,12 +154,14 @@ py::tuple UnbatchNestedImpl(std::function<py::tuple(const py::object&)> func,
     for (int64_t i = 0; i < batch_size; ++i) {
       dst[i] = py::dict();
     }
-    for (const auto [k, v] : src) {
+    const std::vector<std::string> keys = SortedKeys(src);
+    for (const std::string& k : keys) {
+      const py::str key = py::str(k);
       py::tuple cur = UnbatchNestedImpl(
-          func, py::reinterpret_borrow<py::object>(v), batch_size);
+          func, py::reinterpret_borrow<py::object>(src[key]), batch_size);
       for (int64_t i = 0; i < batch_size; ++i) {
         py::dict y = py::reinterpret_borrow<py::dict>(dst[i]);
-        y[k] = cur[i];
+        y[key] = cur[i];
       }
     }
     return dst;
@@ -201,10 +207,7 @@ py::tuple UnbatchNested(std::function<py::tuple(const py::object&)> func,
 }  // namespace nested_utils
 
 void DefineNestedUtils(py::module& m) {
-  py::module sub =
-      m.def_submodule("nested_utils", "A submodule of \"_rlmeta_extension\"");
-
-  sub.def("flatten_nested", &nested_utils::FlattenNested)
+  m.def("flatten_nested", &nested_utils::FlattenNested)
       .def("map_nested", &nested_utils::MapNested)
       .def("collate_nested",
            py::overload_cast<std::function<py::object(const py::tuple&)>,

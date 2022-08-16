@@ -1,0 +1,79 @@
+// Copyright (c) Meta Platforms, Inc. and affiliates.
+//
+// This source code is licensed under the MIT license found in the
+// LICENSE file in the root directory of this source tree.
+
+syntax = "proto2";
+
+package rlmeta.rpc;
+
+service Rpc {
+  rpc RemoteCall(RpcRequest) returns (RpcResponse) {}
+  rpc PyRemoteCall(PyRpcRequest) returns (PyRpcResponse) {}
+}
+
+message RpcRequest {
+  optional string function = 1;
+  optional NestedData args = 2;
+  optional NestedData kwargs = 3;
+}
+
+message RpcResponse {
+  optional NestedData return_value = 1;
+  optional Error error = 2;
+}
+
+message PyRpcRequest {
+  optional string function = 1;
+  optional bytes args = 2;
+  optional bytes kwargs = 3;
+}
+
+message PyRpcResponse {
+  optional bytes return_value = 1;
+  optional string error = 2;
+}
+
+message Error {
+  optional string msg = 1;
+}
+
+message TensorProto {
+  enum TensorType {
+    UNKNOWN = 0;
+    NUMPY = 1;
+    TORCH = 2;
+  }
+
+  optional TensorType tensor_type = 1;
+  optional int32 dtype = 2;
+  repeated int64 shape = 3 [packed = true];
+  optional bytes data = 4;
+}
+
+message SimpleData {
+  oneof value {
+    bool bool_val = 1;
+    int64 int_val = 2;
+    double float_val = 3;
+    string str_val = 4;
+    bytes bytes_val = 5;
+    TensorProto tensor_val = 6;
+  }
+}
+
+message DataVector {
+  repeated NestedData data = 1;
+}
+
+message DataMap {
+  map<string, NestedData> data = 1;
+}
+
+message NestedData {
+  oneof nested_data {
+    SimpleData val = 1;
+    DataVector vec = 2;
+    DataMap map = 3;
+  }
+}

@@ -101,7 +101,7 @@ class AgentFactory:
         return self._cls(*args, **kwargs)
 
     def _make_arg(self, arg: Any, index: int) -> Any:
-        if isinstance(arg, remote.Remote):
-            arg = copy.deepcopy(arg)
-            arg.name = moolib_utils.expend_name_by_index(arg.name, index)
+        # if isinstance(arg, remote.Remote):
+        #     arg = copy.deepcopy(arg)
+        #     arg.name = moolib_utils.expend_name_by_index(arg.name, index)
         return arg

@@ -45,9 +45,10 @@ class DownstreamModel(remote.Remote):
                  server_name: str,
                  server_addr: str,
                  name: Optional[str] = None,
-                 timeout: float = 60) -> None:
+                 timeout: float = 60,
+                 py_aio_client: bool = True) -> None:
         self._wrapped = model
-        self._reset(server_name, server_addr, name, timeout)
+        self._reset(server_name, server_addr, name, timeout, py_aio_client)
 
     # TODO: Find a better way to implement this
     def __getattribute__(self, attr: str) -> Any:
@@ -64,26 +65,31 @@ class DownstreamModel(remote.Remote):
         return self.wrapped(*args, **kwargs)
 
     def pull(self) -> None:
-        state_dict = self.client.sync(self.server_name,
-                                      self.remote_method_name("pull"))
+        # state_dict = self.client.sync(self.server_name,
+        #                               self.remote_method_name("pull"))
+        state_dict = self.client.rpc(self.remote_method_name("pull"))
         self.wrapped.load_state_dict(state_dict)
 
     async def async_pull(self) -> None:
-        state_dict = await self.client.async_(self.server_name,
-                                              self.remote_method_name("pull"))
+        # state_dict = await self.client.async_(self.server_name,
+        #                                       self.remote_method_name("pull"))
+        state_dict = await self.client.async_rpc(self.remote_method_name("pull")
+                                                )
         self.wrapped.load_state_dict(state_dict)
 
     def push(self) -> None:
         state_dict = self.wrapped.state_dict()
         state_dict = nested_utils.map_nested(lambda x: x.cpu(), state_dict)
-        self.client.sync(self.server_name, self.remote_method_name("push"),
-                         state_dict)
+        # self.client.sync(self.server_name, self.remote_method_name("push"),
+        #                  state_dict)
+        self.client.rpc(self.remote_method_name("push"), state_dict)
 
     async def async_push(self) -> None:
         state_dict = self.wrapped.state_dict()
         state_dict = nested_utils.map_nested(lambda x: x.cpu(), state_dict)
-        await self.client.async_(self.server_name,
-                                 self.remote_method_name("push"), state_dict)
+        # await self.client.async_(self.server_name,
+        #                          self.remote_method_name("push"), state_dict)
+        await self.client.async_rpc(self.remote_method_name("push"), state_dict)
 
     def _bind(self) -> None:
         pass

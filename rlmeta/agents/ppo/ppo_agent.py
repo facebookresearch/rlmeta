@@ -156,7 +156,7 @@ class PPOAgent(Agent):
             if self.step_counter % self.push_every_n_steps == 0:
                 self.model.push()
 
-        episode_stats = self.controller.get_stats()
+        episode_stats = StatsDict.from_dict(self.controller.get_stats())
         stats.update(episode_stats)
 
         return stats
@@ -165,7 +165,7 @@ class PPOAgent(Agent):
         self.controller.set_phase(Phase.EVAL, limit=num_episodes, reset=True)
         while self.controller.get_count() < num_episodes:
             time.sleep(1)
-        stats = self.controller.get_stats()
+        stats = StatsDict.from_dict(self.controller.get_stats())
         return stats
 
     def device(self) -> torch.device:
