@@ -121,7 +121,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
         self._priority_type = priority_type
         self._sum_tree = SumSegmentTree(capacity, dtype=priority_type)
-        self._min_tree = MinSegmentTree(capacity, dtype=priority_type)
+        # self._min_tree = MinSegmentTree(capacity, dtype=priority_type)
         self._max_priority = 1.0
 
         self._timestamps = TimestampManager(capacity)
@@ -201,7 +201,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
     def _init_priority(self, index) -> None:
         priority = self._max_priority**self.alpha
         self._sum_tree[index] = priority
-        self._min_tree[index] = priority
+        # self._min_tree[index] = priority
 
     def _update_priority(
             self,
@@ -230,17 +230,18 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         if isinstance(index, int):
             if mask is None or mask:
                 self._sum_tree[index] = priority
-                self._min_tree[index] = priority
+                # self._min_tree[index] = priority
         else:
             self._sum_tree.update(index, priority, mask)
-            self._min_tree.update(index, priority, mask)
+            # self._min_tree.update(index, priority, mask)
 
     def _compute_weight(
             self, index: Union[int, Tensor]) -> Union[float, torch.Tensor]:
         p = self._sum_tree[index]
         if isinstance(p, np.ndarray):
             p = torch.from_numpy(p)
-        p_min = self._min_tree.query(0, self.capacity)
+        # p_min = self._min_tree.query(0, self.capacity)
+        p_min = p.min()
 
         # Importance sampling weight formula:
         #   w_i = (p_i / sum(p) * N) ^ (-beta)
@@ -296,7 +297,12 @@ class RemoteReplayBuffer(remote.Remote):
                  prefetch: int = 0,
                  timeout: float = 60) -> None:
         # Disable python asyncio client for large data transmission.
-        super().__init__(target, server_name, server_addr, name, timeout)
+        super().__init__(target,
+                         server_name,
+                         server_addr,
+                         name,
+                         timeout,
+                         py_aio_client=False)
         self._server_name = server_name
         self._server_addr = server_addr
 
