@@ -317,15 +317,15 @@ class RemoteReplayBuffer(remote.Remote):
     def prefetch(self) -> Optional[int]:
         return self._prefetch
 
-    def connect(self) -> None:
-        if self._connected:
-            return
-
-        self._client = rpc.Client()
-        self._client.connect(self._server_addr)
-
-        self._bind()
-        self._connected = True
+    # def connect(self) -> None:
+    #     if self._connected:
+    #         return
+    #
+    #     self._client = rpc.Client()
+    #     self._client.connect(self._server_addr)
+    #
+    #     self._bind()
+    #     self._connected = True
 
     def sample(
         self, batch_size: int
