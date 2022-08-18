@@ -162,15 +162,14 @@ class PrioritizedReplayBufferTest(TestCaseBase):
         index = torch.arange(self.size)
         weight = torch.rand(self.size)
         expected_weight = torch.pow(weight, self.alpha)
-        expected_weight = torch.pow(
-            (expected_weight * self.size) / (expected_weight.min() * self.size),
-            -self.beta)
 
         replay_buffer.update_priority(index, weight)
-        _, cur_weight, cur_index, cur_timestamp = replay_buffer.sample(
-            self.batch_size)
-        self.assert_tensor_close(cur_weight, expected_weight[cur_index],
-                                 self.rtol, self.atol)
+        _, cur_weight, cur_index, _ = replay_buffer.sample(self.batch_size)
+        expected_weight = expected_weight[cur_index]
+        expected_weight = (expected_weight /
+                           expected_weight.min()).pow(-self.beta)
+        self.assert_tensor_close(cur_weight, expected_weight, self.rtol,
+                                 self.atol)
 
 
 if __name__ == "__main__":

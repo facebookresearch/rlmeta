@@ -5,10 +5,9 @@
 
 from _rlmeta_extension import CircularBuffer
 from _rlmeta_extension import TimestampManager
-from rlmeta.data.segment_tree import SumSegmentTree, MinSegmentTree
+from rlmeta.data.segment_tree import SumSegmentTree
 
 __all__ = [
     "CircularBuffer",
     "SumSegmentTree",
-    "MinSegmentTree",
 ]

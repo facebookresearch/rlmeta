@@ -20,7 +20,7 @@ from rlmeta.core.launchable import Launchable
 from rlmeta.core.server import Server
 from rlmeta.core.types import Tensor, NestedTensor
 from rlmeta.data import CircularBuffer
-from rlmeta.data import SumSegmentTree, MinSegmentTree
+from rlmeta.data import SumSegmentTree
 from rlmeta.data import TimestampManager
 
 console = Console()
@@ -117,7 +117,6 @@ class PrioritizedReplayBuffer(ReplayBuffer):
 
         self._priority_type = priority_type
         self._sum_tree = SumSegmentTree(capacity, dtype=priority_type)
-        self._min_tree = MinSegmentTree(capacity, dtype=priority_type)
         self._max_priority = 1.0
 
         self._timestamps = TimestampManager(capacity)
@@ -196,7 +195,6 @@ class PrioritizedReplayBuffer(ReplayBuffer):
     def _init_priority(self, index) -> None:
         priority = self._max_priority**self.alpha
         self._sum_tree[index] = priority
-        self._min_tree[index] = priority
 
     def _update_priority(
             self,
@@ -225,17 +223,14 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         if isinstance(index, int):
             if mask is None or mask:
                 self._sum_tree[index] = priority
-                self._min_tree[index] = priority
         else:
             self._sum_tree.update(index, priority, mask)
-            self._min_tree.update(index, priority, mask)
 
     def _compute_weight(
             self, index: Union[int, Tensor]) -> Union[float, torch.Tensor]:
         p = self._sum_tree[index]
         if isinstance(p, np.ndarray):
             p = torch.from_numpy(p)
-        p_min = self._min_tree.query(0, self.capacity)
 
         # Importance sampling weight formula:
         #   w_i = (p_i / sum(p) * N) ^ (-beta)
@@ -244,7 +239,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
         #       ((min(p) / sum(p) * N) ^ (-beta))
         #   weight_i = ((p_i / sum(p) * N) / (min(p) / sum(p) * N)) ^ (-beta)
         #   weight_i = (p_i / min(p)) ^ (-beta)
-        return (p / p_min)**(-self.beta)
+        return p.div_(p.min()).pow_(-self.beta)
 
     def _append(self,
                 data: NestedTensor,
@@ -254,7 +249,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             self._init_priority(index)
         else:
             self._update_priority(index, priority)
-        self._update_timestamp(index)
+        self._timestamps.update(index)
         return index
 
     def _extend(self,
