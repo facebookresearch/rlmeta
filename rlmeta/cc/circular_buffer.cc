@@ -10,7 +10,7 @@
 #include <cassert>
 #include <memory>
 
-#include "rlmeta/cc/numpy_utils.h"
+#include "rlmeta/cc/utils/numpy_utils.h"
 
 namespace rlmeta {
 

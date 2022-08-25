@@ -14,8 +14,8 @@
 #include <cstring>
 #include <vector>
 
-#include "rlmeta/cc/numpy_utils.h"
-#include "rlmeta/cc/torch_utils.h"
+#include "rlmeta/cc/utils/numpy_utils.h"
+#include "rlmeta/cc/utils/torch_utils.h"
 
 namespace rlmeta {
 

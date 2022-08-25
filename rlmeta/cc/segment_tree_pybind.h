@@ -10,9 +10,9 @@
 #include <torch/extension.h>
 #include <torch/torch.h>
 
-#include "rlmeta/cc/numpy_utils.h"
 #include "rlmeta/cc/segment_tree.h"
-#include "rlmeta/cc/torch_utils.h"
+#include "rlmeta/cc/utils/numpy_utils.h"
+#include "rlmeta/cc/utils/torch_utils.h"
 
 namespace py = pybind11;
 

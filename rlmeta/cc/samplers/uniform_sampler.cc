@@ -23,6 +23,15 @@ KeysAndPriorities UniformSampler::Sample(int64_t num) {
       std::move(keys), std::move(priorities));
 }
 
+void UniformSampler::LoadKeys(const py::array_t<int64_t>& arr) {
+  const int64_t n = arr.size();
+  keys_.assign(arr.data(), arr.data() + n);
+  key_to_index_.clear();
+  for (int64_t i = 0; i < n; ++i) {
+    key_to_index_.emplace(keys_[i], i);
+  }
+}
+
 void UniformSampler::InsertImpl(int64_t n, const int64_t* keys, double priority,
                                 bool* mask) {
   for (int64_t i = 0; i < n; ++i) {
@@ -60,12 +69,12 @@ void UniformSampler::DeleteImpl(int64_t n, const int64_t* keys, bool* mask) {
 void DefineUniformSampler(py::module& m) {
   py::class_<UniformSampler, Sampler, std::shared_ptr<UniformSampler>>(
       m, "UniformSampler")
-      .def(py::init<int64_t>(), py::arg("capacity") = 65536)
+      .def(py::init<>())
       .def(py::pickle(
-          [](const UniformSampler& sampler) { return sampler.DumpData(); },
+          [](const UniformSampler& sampler) { return sampler.DumpKeys(); },
           [](const py::array_t<int64_t>& arr) {
             UniformSampler sampler;
-            sampler.LoadData(arr);
+            sampler.LoadKeys(arr);
             return sampler;
           }));
 }

@@ -21,6 +21,11 @@ struct TorchDataType<bool> {
 };
 
 template <>
+struct TorchDataType<int32_t> {
+  static constexpr torch::ScalarType value = torch::kInt32;
+};
+
+template <>
 struct TorchDataType<int64_t> {
   static constexpr torch::ScalarType value = torch::kInt64;
 };

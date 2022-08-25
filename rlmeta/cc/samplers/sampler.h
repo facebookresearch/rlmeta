@@ -21,7 +21,8 @@ using KeysAndPriorities = std::pair<py::array_t<int64_t>, py::array_t<double>>;
 
 class Sampler {
  public:
-  virtual void Seed(int64_t seed) { random_gen_.seed(seed); }
+  virtual void Reset() = 0;
+  virtual void Reset(int64_t seed) = 0;
 
   virtual bool Insert(int64_t key, double priority) = 0;
   virtual py::array_t<bool> Insert(const py::array_t<int64_t>& keys,
@@ -53,6 +54,14 @@ class Sampler {
 
 class PySampler : public Sampler {
  public:
+  virtual void Reset() override {
+    PYBIND11_OVERRIDE_PURE(void, Sampler, Reset);
+  }
+
+  virtual void Reset(int64_t seed) override {
+    PYBIND11_OVERRIDE_PURE(void, Sampler, Reset, seed);
+  }
+
   bool Insert(int64_t key, double priority) override {
     PYBIND11_OVERRIDE_PURE(bool, Sampler, Insert, key, priority);
   }

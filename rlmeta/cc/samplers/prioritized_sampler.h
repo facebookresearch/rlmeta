@@ -10,13 +10,11 @@
 #include <torch/extension.h>
 #include <torch/torch.h>
 
-#include <algorithm>
-#include <cassert>
 #include <unordered_map>
-#include <utility>
 #include <vector>
 
 #include "rlmeta/cc/samplers/sampler.h"
+#include "rlmeta/cc/segment_tree.h"
 #include "rlmeta/cc/utils/numpy_utils.h"
 #include "rlmeta/cc/utils/torch_utils.h"
 
@@ -24,28 +22,28 @@ namespace py = pybind11;
 
 namespace rlmeta {
 
-class UniformSampler : public Sampler {
+class PrioritizedSampler : public Sampler {
  public:
-  UniformSampler() = default;
-
-  void Reset() override {
-    keys_.clear();
-    key_to_index_.clear();
+  explicit PrioritizedSampler(int64_t capacity)
+      : capacity_(capacity), sum_tree_(capacity_) {
+    keys_.reserve(capacity_);
   }
 
-  void Reset(int64_t seed) override {
-    random_gen_.seed(seed);
-    keys_.clear();
-    key_to_index_.clear();
-  }
+  int64_t capacity() const { return capacity_; }
 
-  bool Insert(int64_t key, double /*priority*/) override {
+  bool Insert(int64_t key, double priority) override {
     const int64_t index = keys_.size();
     const auto [it, ret] = key_to_index_.emplace(key, index);
-    if (ret) {
-      keys_.push_back(key);
+    if (!ret) {
+      return false;
     }
-    return ret;
+    if (index >= capacity_) {
+      capacity_ <<= 1;
+      sum_tree_.Resize(capacity_);
+    }
+    keys_.push_back(key);
+    sum_tree_.Update(index, priority);
+    return true;
   }
 
   py::array_t<bool> Insert(const py::array_t<int64_t>& keys,
@@ -56,10 +54,10 @@ class UniformSampler : public Sampler {
   }
 
   py::array_t<bool> Insert(const py::array_t<int64_t>& keys,
-                           const py::array_t<double>& /*priorities*/) override {
+                           const py::array_t<double>& priorities) override {
     assert(keys.size() == priorities.size());
     py::array_t<bool> mask = utils::NumpyEmptyLike<int64_t, bool>(keys);
-    InsertImpl(keys.size(), keys.data(), nullptr, mask.mutable_data());
+    InsertImpl(keys.size(), keys.data(), priorities, mask.mutable_data());
     return mask;
   }
 
@@ -73,17 +71,25 @@ class UniformSampler : public Sampler {
   }
 
   torch::Tensor Insert(const torch::Tensor& keys,
-                       const torch::Tensor& /*priorities*/) override {
+                       const torch::Tensor& priorities) override {
     assert(keys.dtype() == torch::kInt64);
+    assert(priorities.dtype() == torch::kDouble);
     const torch::Tensor keys_contiguous = keys.contiguous();
+    const torch::Tensor priorities_contiguous = priorities.contiguous();
     torch::Tensor mask = torch::empty_like(keys_contiguous, torch::kBool);
     InsertImpl(keys_contiguous.numel(), keys_contiguous.data_ptr<int64_t>(),
-               nullptr, mask.data_ptr<bool>());
+               priorities_contiguous.data_ptr<double>(), mask.data_ptr<bool>());
     return mask;
   }
 
-  bool Update(int64_t key, double /*priority*/) override {
-    return key_to_index_.find(key) != key_to_index_.end();
+  bool Update(int64_t key, double priority) override {
+    const auto it = key_to_index_.find(key);
+    if (it == key_to_index_.end()) {
+      return false;
+    }
+    const int64_t index = it->second;
+    sum_tree_.Update(index, priority);
+    return true;
   }
 
   py::array_t<bool> Update(const py::array_t<int64_t>& keys,
@@ -94,10 +100,11 @@ class UniformSampler : public Sampler {
   }
 
   py::array_t<bool> Update(const py::array_t<int64_t>& keys,
-                           const py::array_t<double>& /*priorities*/) override {
+                           const py::array_t<double>& priorities) override {
     assert(keys.size() == priorities.size());
     py::array_t<bool> mask = utils::NumpyEmptyLike<int64_t, bool>(keys);
-    UpdateImpl(keys.size(), keys.data(), nullptr, mask.mutable_data());
+    UpdateImpl(keys.size(), keys.data(), priorities.data(),
+               mask.mutable_data());
     return mask;
   }
 
@@ -113,10 +120,12 @@ class UniformSampler : public Sampler {
   torch::Tensor Update(const torch::Tensor& keys,
                        const torch::Tensor& /*priorities*/) override {
     assert(keys.dtype() == torch::kInt64);
+    assert(priorities.dtype() == torch::kDouble);
     const torch::Tensor keys_contiguous = keys.contiguous();
+    const torch::Tensor priorities_contiguous = priorities.contiguous();
     torch::Tensor mask = torch::empty_like(keys_contiguous, torch::kBool);
     UpdateImpl(keys_contiguous.numel(), keys_contiguous.data_ptr<int64_t>(),
-               nullptr, mask.data_ptr<bool>());
+               priorities_contiguous.data_ptr<double>(), mask.data_ptr<bool>());
     return mask;
   }
 
@@ -125,15 +134,10 @@ class UniformSampler : public Sampler {
     if (it == key_to_index_.end()) {
       return false;
     }
-    const int64_t index = it->second;
-    const int64_t last_index = keys_.size() - 1;
-    if (index < last_index) {
-      const int64_t last_key = keys_.back();
-      keys_[index] = last_key;
-      key_to_index_[last_key] = index;
-    }
+    keys_[it->second] = keys_.back();
     keys_.pop_back();
     key_to_index_.erase(it);
+    sum_tree_.Update(keys_.size(), sum_tree_.identity_element());
     return true;
   }
 
@@ -152,13 +156,22 @@ class UniformSampler : public Sampler {
     return mask;
   }
 
-  KeysAndPriorities Sample(int64_t num) override;
-
   py::array_t<int64_t> DumpKeys() const {
     return utils::AsNumpyArray<int64_t>(keys_);
   }
 
-  void LoadKeys(const py::array_t<int64_t>& arr);
+  void LoadKeys(const py::array_t<int64_t>& arr) {
+    const int64_t n = arr.size();
+    keys_.assign(arr.data(), arr.data() + n);
+    key_to_index_.clear();
+    for (int64_t i = 0; i < n; ++i) {
+      key_to_index_.emplace(keys_[i], i);
+    }
+  }
+
+  py::array_t<double> DumpPriorities() const;
+
+  void LoadPriorities(const py::array_t<double>& priorities);
 
  protected:
   void InsertImpl(int64_t n, const int64_t* keys, double priority, bool* mask);
@@ -171,10 +184,10 @@ class UniformSampler : public Sampler {
 
   void DeleteImpl(int64_t n, const int64_t* keys, bool* mask);
 
+  int64_t capacity_;
   std::vector<int64_t> keys_;
   std::unordered_map<int64_t, int64_t> key_to_index_;
+  SumSegmentTree<double> sum_tree_;
 };
-
-void DefineUniformSampler(py::module& m);
 
 }  // namespace rlmeta
