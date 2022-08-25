@@ -75,6 +75,8 @@ class ApexDQNAgent(Agent):
         self.trajectory = []
         self.step_counter = 0
 
+        self.training_variables = {}
+
     def reset(self) -> None:
         self.step_counter = 0
 
@@ -221,7 +223,16 @@ class ApexDQNAgent(Agent):
                                                    self.grad_clip)
         self.optimizer.step()
         priority = td_err.detach().abs().cpu()
-        self.replay_buffer.update_priority(index, priority, timestamp)
+
+        # Wait for previous update request
+        if "update_fut" in self.training_variables:
+            self.training_variables["update_fut"].wait()
+
+        # Async update to start next training step when waiting for updating
+        # priorities.
+        update_fut = self.replay_buffer.async_update_priority(
+            index, priority, timestamp)
+        self.training_variables["update_fut"] = update_fut
 
         return {
             "reward": batch["reward"].detach().mean().item(),

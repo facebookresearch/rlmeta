@@ -33,7 +33,8 @@ def main(cfg):
     logging.info(hydra_utils.config_to_json(cfg))
 
     env = atari_wrappers.make_atari(cfg.env)
-    train_model = AtariDQNModel(env.action_space.n).to(cfg.train_device)
+    train_model = AtariDQNModel(env.action_space.n,
+                                reward_rescaling=False).to(cfg.train_device)
     optimizer = torch.optim.Adam(train_model.parameters(), lr=cfg.lr)
 
     infer_model = copy.deepcopy(train_model).to(cfg.infer_device)
