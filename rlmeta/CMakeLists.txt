@@ -53,6 +53,8 @@ pybind11_add_module(
   ${CMAKE_CURRENT_SOURCE_DIR}/cc/circular_buffer.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/cc/nested_utils.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/cc/pybind.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/cc/samplers/sampler.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/cc/samplers/uniform_sampler.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/cc/timestamp_manager.cc
 )
 target_include_directories(

@@ -27,6 +27,8 @@ from rlmeta.core.model import wrap_downstream_model
 from rlmeta.core.replay_buffer import ReplayBuffer, make_remote_replay_buffer
 from rlmeta.core.server import Server, ServerList
 
+from _rlmeta_extension import UniformSampler
+
 
 @hydra.main(config_path="./conf", config_name="conf_ppo")
 def main(cfg):
@@ -39,7 +41,7 @@ def main(cfg):
     infer_model = copy.deepcopy(train_model).to(cfg.infer_device)
 
     ctrl = Controller()
-    rb = ReplayBuffer(cfg.replay_buffer_size)
+    rb = ReplayBuffer(cfg.replay_buffer_size, UniformSampler())
 
     m_server = Server(cfg.m_server_name, cfg.m_server_addr)
     r_server = Server(cfg.r_server_name, cfg.r_server_addr)

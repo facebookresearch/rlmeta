@@ -8,6 +8,8 @@
 #include "rlmeta/cc/circular_buffer.h"
 #include "rlmeta/cc/nested_utils.h"
 #include "rlmeta/cc/segment_tree_pybind.h"
+#include "rlmeta/cc/samplers/sampler.h"
+#include "rlmeta/cc/samplers/uniform_sampler.h"
 #include "rlmeta/cc/timestamp_manager.h"
 
 namespace py = pybind11;
@@ -21,6 +23,9 @@ PYBIND11_MODULE(_rlmeta_extension, m) {
   rlmeta::DefineCircularBuffer(m);
   rlmeta::DefineNestedUtils(m);
   rlmeta::DefineTimestampManager(m);
+
+  rlmeta::DefineSampler(m);
+  rlmeta::DefineUniformSampler(m);
 }
 
 }  // namespace

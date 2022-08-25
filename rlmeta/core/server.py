@@ -86,7 +86,7 @@ class Server(Launchable):
                 service.init_execution()
 
         self._server = moolib.Rpc()
-        self._server.set_transports(["uv"])
+        # self._server.set_transports(["uv"])
         self._server.set_name(self._name)
         self._server.set_timeout(self._timeout)
         console.log(f"Server={self.name} listening to {self._addr}")

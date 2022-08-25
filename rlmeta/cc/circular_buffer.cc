@@ -130,11 +130,8 @@ void DefineCircularBuffer(py::module& m) {
       .def("append",
            [](CircularBuffer& buffer, const py::object& o) {
              const auto [new_key, old_key] = buffer.Append(o);
-             if (old_key >= 0) {
-               return py::make_tuple(new_key, old_key);
-             } else {
-               return py::make_tuple(new_key, py::none());
-             }
+             return old_key < 0 ? py::make_tuple(new_key, py::none())
+                                : py::make_tuple(new_key, old_key);
            })
       .def("extend",
            py::overload_cast<const py::tuple&>(&CircularBuffer::Extend))

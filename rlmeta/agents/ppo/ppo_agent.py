@@ -141,7 +141,7 @@ class PPOAgent(Agent):
         console.log(f"Training for num_steps = {num_steps}")
         for _ in track(range(num_steps), description="Training..."):
             t0 = time.perf_counter()
-            batch = self.replay_buffer.sample(self.batch_size)
+            _, batch, _ = self.replay_buffer.sample(self.batch_size)
             t1 = time.perf_counter()
             step_stats = self._train_step(batch)
             t2 = time.perf_counter()
