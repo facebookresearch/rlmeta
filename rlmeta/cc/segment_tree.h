@@ -59,7 +59,7 @@ class SegmentTree {
 
   T identity_element() const { return identity_element_; }
 
-  T At(int64_t index) const { return values_[index | capacity_]; }
+  T At(int64_t index) const { return values_[index + capacity_]; }
 
   void Resize(int64_t size) {
     if (size < size_) {
@@ -93,7 +93,7 @@ class SegmentTree {
   // Update the item at index to value.
   // Time complexity: O(logN).
   void Update(int64_t index, T value) {
-    index |= capacity_;
+    index += capacity_;
     for (values_[index] = value; index > 1; index >>= 1) {
       values_[index >> 1] = op_(values_[index], values_[index ^ 1]);
     }
@@ -107,8 +107,8 @@ class SegmentTree {
       return values_[1];
     }
     T ret = identity_element_;
-    l |= capacity_;
-    r |= capacity_;
+    l += capacity_;
+    r += capacity_;
     while (l < r) {
       if (l & 1) {
         ret = op_(ret, values_[l++]);
@@ -124,10 +124,10 @@ class SegmentTree {
 
  protected:
   int64_t Capacity(int64_t size) const {
-    int64_t ret = 1;
-    for (; ret <= size; ret <<= 1)
+    int64_t capacity = 1;
+    for (; capacity < size; capacity <<= 1)
       ;
-    return ret;
+    return capacity;
   }
 
   void InitInternal() {
