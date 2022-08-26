@@ -10,7 +10,10 @@
 #include <torch/extension.h>
 #include <torch/torch.h>
 
+#include <cassert>
+#include <cmath>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "rlmeta/cc/samplers/sampler.h"
@@ -24,12 +27,40 @@ namespace rlmeta {
 
 class PrioritizedSampler : public Sampler {
  public:
-  explicit PrioritizedSampler(int64_t capacity)
-      : capacity_(capacity), sum_tree_(capacity_) {
+  static constexpr int64_t kDefaultCapacity = 65536;
+  static constexpr double kDefaultPriorityExponent = 1.0;
+  static constexpr double kDefaultEps = 1e-8;
+
+  PrioritizedSampler() : sum_tree_(capacity_) { keys_.reserve(capacity_); }
+
+  PrioritizedSampler(int64_t capacity, double priority_exponent, double eps)
+      : capacity_(capacity),
+        priority_exponent_(priority_exponent),
+        eps_(eps),
+        sum_tree_(capacity_) {
     keys_.reserve(capacity_);
   }
 
   int64_t capacity() const { return capacity_; }
+
+  double priority_exponent() const { return priority_exponent_; }
+
+  double eps() const { return eps_; }
+
+  int64_t Size() const override { return keys_.size(); }
+
+  void Reset() override {
+    keys_.clear();
+    key_to_index_.clear();
+    sum_tree_.Reset();
+  }
+
+  void Reset(int64_t seed) override {
+    random_gen_.seed(seed);
+    keys_.clear();
+    key_to_index_.clear();
+    sum_tree_.Reset();
+  }
 
   bool Insert(int64_t key, double priority) override {
     const int64_t index = keys_.size();
@@ -42,7 +73,7 @@ class PrioritizedSampler : public Sampler {
       sum_tree_.Resize(capacity_);
     }
     keys_.push_back(key);
-    sum_tree_.Update(index, priority);
+    sum_tree_.Update(index, ComputePriority(priority));
     return true;
   }
 
@@ -57,7 +88,8 @@ class PrioritizedSampler : public Sampler {
                            const py::array_t<double>& priorities) override {
     assert(keys.size() == priorities.size());
     py::array_t<bool> mask = utils::NumpyEmptyLike<int64_t, bool>(keys);
-    InsertImpl(keys.size(), keys.data(), priorities, mask.mutable_data());
+    InsertImpl(keys.size(), keys.data(), priorities.data(),
+               mask.mutable_data());
     return mask;
   }
 
@@ -87,8 +119,7 @@ class PrioritizedSampler : public Sampler {
     if (it == key_to_index_.end()) {
       return false;
     }
-    const int64_t index = it->second;
-    sum_tree_.Update(index, priority);
+    sum_tree_.Update(it->second, ComputePriority(priority));
     return true;
   }
 
@@ -118,7 +149,7 @@ class PrioritizedSampler : public Sampler {
   }
 
   torch::Tensor Update(const torch::Tensor& keys,
-                       const torch::Tensor& /*priorities*/) override {
+                       const torch::Tensor& priorities) override {
     assert(keys.dtype() == torch::kInt64);
     assert(priorities.dtype() == torch::kDouble);
     const torch::Tensor keys_contiguous = keys.contiguous();
@@ -134,10 +165,16 @@ class PrioritizedSampler : public Sampler {
     if (it == key_to_index_.end()) {
       return false;
     }
-    keys_[it->second] = keys_.back();
+    const int64_t index = it->second;
+    const int64_t last_index = keys_.size() - 1;
+    if (index < last_index) {
+      const int64_t last_key = keys_.back();
+      keys_[index] = last_key;
+      key_to_index_[last_key] = index;
+    }
     keys_.pop_back();
     key_to_index_.erase(it);
-    sum_tree_.Update(keys_.size(), sum_tree_.identity_element());
+    sum_tree_.Update(last_index, sum_tree_.identity_element());
     return true;
   }
 
@@ -156,6 +193,8 @@ class PrioritizedSampler : public Sampler {
     return mask;
   }
 
+  KeysAndPriorities Sample(int64_t num) const override;
+
   py::array_t<int64_t> DumpKeys() const {
     return utils::AsNumpyArray<int64_t>(keys_);
   }
@@ -171,9 +210,15 @@ class PrioritizedSampler : public Sampler {
 
   py::array_t<double> DumpPriorities() const;
 
-  void LoadPriorities(const py::array_t<double>& priorities);
+  void LoadPriorities(const py::array_t<double>& priorities) {
+    sum_tree_.Assign(priorities.data(), priorities.data() + priorities.size());
+  }
 
  protected:
+  double ComputePriority(double priority) const {
+    return std::pow(priority + eps_, priority_exponent_);
+  }
+
   void InsertImpl(int64_t n, const int64_t* keys, double priority, bool* mask);
   void InsertImpl(int64_t n, const int64_t* keys, const double* priorities,
                   bool* mask);
@@ -184,10 +229,14 @@ class PrioritizedSampler : public Sampler {
 
   void DeleteImpl(int64_t n, const int64_t* keys, bool* mask);
 
-  int64_t capacity_;
+  int64_t capacity_ = kDefaultCapacity;
+  const double priority_exponent_ = kDefaultPriorityExponent;
+  const double eps_ = kDefaultEps;
   std::vector<int64_t> keys_;
   std::unordered_map<int64_t, int64_t> key_to_index_;
   SumSegmentTree<double> sum_tree_;
 };
+
+void DefinePrioritizedSampler(py::module& m);
 
 }  // namespace rlmeta

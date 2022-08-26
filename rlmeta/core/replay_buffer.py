@@ -42,7 +42,8 @@ class ReplayBuffer(remote.Remotable, Launchable):
         if collate_fn is not None:
             self._collate_fn = collate_fn
         else:
-            self._collate_fn = data_utils.stack_tensors
+            # self._collate_fn = data_utils.stack_tensors
+            self._collate_fn = torch.stack
 
     def __len__(self) -> int:
         return len(self._buffer)

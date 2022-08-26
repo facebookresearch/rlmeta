@@ -13,6 +13,8 @@ namespace rlmeta {
 
 void DefineSampler(py::module& m) {
   py::class_<Sampler, PySampler, std::shared_ptr<Sampler>>(m, "Sampler")
+      .def_property_readonly("size", &Sampler::Size)
+      .def("__len__", &Sampler::Size)
       .def("reset", py::overload_cast<>(&Sampler::Reset))
       .def("reset", py::overload_cast<int64_t>(&Sampler::Reset))
       .def("insert", py::overload_cast<int64_t, double>(&Sampler::Insert))

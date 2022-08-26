@@ -5,6 +5,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cassert>
 #include <cstdint>
 #include <cstring>
@@ -61,6 +62,8 @@ class SegmentTree {
 
   T At(int64_t index) const { return values_[index + capacity_]; }
 
+  void Reset() { std::fill(values_.begin(), values_.end(), identity_element_); }
+
   void Resize(int64_t size) {
     if (size < size_) {
       std::fill(values_.data() + capacity_ + size,
@@ -88,6 +91,14 @@ class SegmentTree {
       InitInternal();
       values_.resize(2 * capacity_);
     }
+  }
+
+  template <class InputIterator>
+  void Assign(InputIterator first, InputIterator last) {
+    size_ = std::distance(first, last);
+    capacity_ = Capacity(size_);
+    values_.assign(2 * capacity_, identity_element_);
+    std::copy(first, last, values_.begin() + capacity_);
   }
 
   // Update the item at index to value.

@@ -40,6 +40,7 @@ class ApexDQNAgent(Agent):
         grad_clip: float = 50.0,
         multi_step: int = 1,
         gamma: float = 0.99,
+        importance_sampling_exponent: float = 0.4,
         learning_starts: Optional[int] = None,
         sync_every_n_steps: int = 10,
         push_every_n_steps: int = 1,
@@ -61,6 +62,7 @@ class ApexDQNAgent(Agent):
 
         self.multi_step = multi_step
         self.gamma = gamma
+        self.importance_sampling_exponent = importance_sampling_exponent
         self.learning_starts = learning_starts
 
         self._additional_models_to_update = additional_models_to_update
@@ -140,10 +142,12 @@ class ApexDQNAgent(Agent):
         console.log(f"Training for num_steps = {num_steps}")
         for _ in track(range(num_steps), description="Training..."):
             t0 = time.perf_counter()
-            batch, weight, index, timestamp = self.replay_buffer.sample(
-                self.batch_size)
+            # batch, weight, index, timestamp = self.replay_buffer.sample(
+            #     self.batch_size)
+            keys, batch, priorities = self.replay_buffer.sample(self.batch_size)
             t1 = time.perf_counter()
-            step_stats = self.train_step(batch, weight, index, timestamp)
+            # step_stats = self.train_step(batch, weight, index, timestamp)
+            step_stats = self.train_step(keys, batch, priorities)
             t2 = time.perf_counter()
             time_stats = {
                 "sample_data_time/ms": (t1 - t0) * 1000.0,
@@ -204,17 +208,22 @@ class ApexDQNAgent(Agent):
 
         return replay
 
-    def train_step(self, batch: NestedTensor, weight: torch.Tensor,
-                   index: torch.Tensor,
-                   timestamp: torch.Tensor) -> Dict[str, float]:
+    # def train_step(self, batch: NestedTensor, weight: torch.Tensor,
+    #                index: torch.Tensor,
+    #                timestamp: torch.Tensor) -> Dict[str, float]:
+    def train_step(self, keys: torch.Tensor, batch: NestedTensor,
+                   priorities: torch.Tensor) -> Dict[str, float]:
         device = next(self.model.parameters()).device
         batch = nested_utils.map_nested(lambda x: x.to(device), batch)
         self.optimizer.zero_grad()
 
         td_err = self.model.td_error(
             batch, torch.tensor([self.gamma**self.multi_step], device=device))
-        weight = weight.to(device=device,
-                           dtype=td_err.dtype)  # size = (batch_size)
+        # weight = weight.to(device=device,
+        #                    dtype=td_err.dtype)  # size = (batch_size)
+        priorities = priorities.to(dtype=td_err.dtype, device=device)
+        weight = (priorities /
+                  priorities.min()).pow_(-self.importance_sampling_exponent)
         loss = td_err.square() * weight * 0.5
         loss = loss.mean()
 
@@ -222,7 +231,8 @@ class ApexDQNAgent(Agent):
         grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(),
                                                    self.grad_clip)
         self.optimizer.step()
-        priority = td_err.detach().abs().cpu()
+        # priority = td_err.detach().abs().cpu()
+        priorities = td_err.detach().abs().cpu()
 
         # Wait for previous update request
         if "update_fut" in self.training_variables:
@@ -230,14 +240,16 @@ class ApexDQNAgent(Agent):
 
         # Async update to start next training step when waiting for updating
         # priorities.
-        update_fut = self.replay_buffer.async_update_priority(
-            index, priority, timestamp)
+        # update_fut = self.replay_buffer.async_update_priority(
+        #     index, priority, timestamp)
+        update_fut = self.replay_buffer.async_update(keys, priorities)
         self.training_variables["update_fut"] = update_fut
 
         return {
             "reward": batch["reward"].detach().mean().item(),
             "loss": loss.detach().mean().item(),
             "grad_norm": grad_norm.detach().mean().item(),
+            "td_err": priorities.mean().item(),
         }
 
 

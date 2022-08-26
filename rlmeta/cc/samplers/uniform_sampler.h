@@ -10,7 +10,6 @@
 #include <torch/extension.h>
 #include <torch/torch.h>
 
-#include <algorithm>
 #include <cassert>
 #include <unordered_map>
 #include <utility>
@@ -27,6 +26,8 @@ namespace rlmeta {
 class UniformSampler : public Sampler {
  public:
   UniformSampler() = default;
+
+  int64_t Size() const override { return keys_.size(); }
 
   void Reset() override {
     keys_.clear();
@@ -152,7 +153,7 @@ class UniformSampler : public Sampler {
     return mask;
   }
 
-  KeysAndPriorities Sample(int64_t num) override;
+  KeysAndPriorities Sample(int64_t num) const override;
 
   py::array_t<int64_t> DumpKeys() const {
     return utils::AsNumpyArray<int64_t>(keys_);

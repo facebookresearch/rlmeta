@@ -21,6 +21,8 @@ using KeysAndPriorities = std::pair<py::array_t<int64_t>, py::array_t<double>>;
 
 class Sampler {
  public:
+  virtual int64_t Size() const = 0;
+
   virtual void Reset() = 0;
   virtual void Reset(int64_t seed) = 0;
 
@@ -46,19 +48,21 @@ class Sampler {
   virtual py::array_t<bool> Delete(const py::array_t<int64_t>& keys) = 0;
   virtual torch::Tensor Delete(const torch::Tensor& keys) = 0;
 
-  virtual KeysAndPriorities Sample(int64_t num) = 0;
+  virtual KeysAndPriorities Sample(int64_t num) const = 0;
 
  protected:
-  std::mt19937_64 random_gen_{std::random_device()()};
+  mutable std::mt19937_64 random_gen_{std::random_device()()};
 };
 
 class PySampler : public Sampler {
  public:
-  virtual void Reset() override {
-    PYBIND11_OVERRIDE_PURE(void, Sampler, Reset);
+  int64_t Size() const override {
+    PYBIND11_OVERRIDE_PURE(int64_t, Sampler, Size);
   }
 
-  virtual void Reset(int64_t seed) override {
+  void Reset() override { PYBIND11_OVERRIDE_PURE(void, Sampler, Reset); }
+
+  void Reset(int64_t seed) override {
     PYBIND11_OVERRIDE_PURE(void, Sampler, Reset, seed);
   }
 
@@ -122,7 +126,7 @@ class PySampler : public Sampler {
     PYBIND11_OVERRIDE_PURE(torch::Tensor, Sampler, Delete, keys);
   }
 
-  KeysAndPriorities Sample(int64_t num) override {
+  KeysAndPriorities Sample(int64_t num) const override {
     PYBIND11_OVERRIDE_PURE(KeysAndPriorities, Sampler, Sample, num);
   }
 };
