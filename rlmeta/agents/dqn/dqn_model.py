@@ -5,6 +5,8 @@
 
 import abc
 
+from typing import Tuple
+
 import torch
 import torch.nn as nn
 
@@ -28,7 +30,7 @@ class DQNModel(RemotableModel):
 
     @abc.abstractmethod
     def act(self, obs: torch.Tensor, eps: torch.Tensor, *args,
-            **kwargs) -> torch.Tensor:
+            **kwargs) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Act function will be called remotely by the agent.
         This function should upload the input to the device and download the
@@ -49,8 +51,7 @@ class DQNModel(RemotableModel):
         """
 
     @abc.abstractmethod
-    def compute_priority(self, batch: NestedTensor,
-                         gamma: torch.Tensor) -> torch.Tensor:
+    def compute_priority(self, batch: NestedTensor) -> torch.Tensor:
         """
         """
 
