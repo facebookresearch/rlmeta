@@ -16,7 +16,6 @@ import rlmeta.utils.nested_utils as nested_utils
 
 from examples.atari.backbone import AtariBackbone
 from rlmeta.agents.dqn import DQNModel
-# from rlmeta.core.rescalers import SqrtRescaler
 from rlmeta.core.types import NestedTensor
 
 

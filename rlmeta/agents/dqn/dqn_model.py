@@ -52,7 +52,6 @@ class DQNModel(RemotableModel):
 
     @abc.abstractmethod
     def compute_priority(self, batch: NestedTensor) -> torch.Tensor:
-                         # gamma: torch.Tensor) -> torch.Tensor:
         """
         """
 
