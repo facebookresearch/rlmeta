@@ -20,6 +20,7 @@ from rlmeta.agents.agent import Agent, AgentFactory
 from rlmeta.core.controller import Controller, ControllerLike, Phase
 from rlmeta.core.model import ModelLike
 from rlmeta.core.replay_buffer import ReplayBufferLike
+from rlmeta.core.rescalers import SqrtRescaler
 from rlmeta.core.types import Action, TimeStep
 from rlmeta.core.types import NestedTensor
 from rlmeta.utils.stats_dict import StatsDict
@@ -36,13 +37,15 @@ class ApexDQNAgent(Agent):
         replay_buffer: Optional[ReplayBufferLike] = None,
         controller: Optional[ControllerLike] = None,
         optimizer: Optional[torch.optim.Optimizer] = None,
-        batch_size: int = 128,
+        batch_size: int = 512,
+        local_batch_size: int = 1024,
         grad_clip: float = 50.0,
         multi_step: int = 1,
         gamma: float = 0.99,
+        reward_rescaling: bool = True,
         learning_starts: Optional[int] = None,
-        sync_every_n_steps: int = 10,
-        push_every_n_steps: int = 1,
+        sync_every_n_steps: int = 2500,
+        push_every_n_steps: int = 10,
         collate_fn: Optional[Callable[[Sequence[NestedTensor]],
                                       NestedTensor]] = None,
         additional_models_to_update: Optional[List[ModelLike]] = None,
@@ -57,10 +60,13 @@ class ApexDQNAgent(Agent):
 
         self.optimizer = optimizer
         self.batch_size = batch_size
+        self.local_batch_size = local_batch_size
         self.grad_clip = grad_clip
 
         self.multi_step = multi_step
         self.gamma = gamma
+        self.reward_rescaling = reward_rescaling
+        self.reward_rescaler = SqrtRescaler() if reward_rescaling else None
         self.learning_starts = learning_starts
 
         self._additional_models_to_update = additional_models_to_update
@@ -82,48 +88,71 @@ class ApexDQNAgent(Agent):
 
     def act(self, timestep: TimeStep) -> Action:
         obs = timestep.observation
-        action = self.model.act(obs, torch.tensor([self.eps]))
-        return Action(action, info=None)
+        action, v = self.model.act(obs, torch.tensor([self.eps]))
+        return Action(action, info={"v": v})
 
     async def async_act(self, timestep: TimeStep) -> Action:
         obs = timestep.observation
-        action = await self.model.async_act(obs, torch.tensor([self.eps]))
-        return Action(action, info=None)
+        action, v = await self.model.async_act(obs, torch.tensor([self.eps]))
+        return Action(action, info={"v": v})
 
     async def async_observe_init(self, timestep: TimeStep) -> None:
+        if self.replay_buffer is None:
+            return
         obs, _, done, _ = timestep
         self.trajectory = [{"obs": obs, "done": done}]
 
     async def async_observe(self, action: Action,
                             next_timestep: TimeStep) -> None:
-        act, _ = action
+        if self.replay_buffer is None:
+            return
+        act, info = action
         obs, reward, done, _ = next_timestep
         cur = self.trajectory[-1]
         cur["reward"] = reward
         cur["action"] = act
+        cur["v"] = info["v"]
         self.trajectory.append({"obs": obs, "done": done})
 
     def update(self) -> None:
-        if not self.trajectory[-1]["done"]:
+        if self.replay_buffer is None or not self.trajectory[-1]["done"]:
             return
-        if self.replay_buffer is not None:
-            replay = self.make_replay()
-            batch = nested_utils.collate_nested(self.collate_fn, replay)
+
+        replay = self.make_replay()
+        batch = []
+        for data in replay:
+            batch.append(data)
+            if len(batch) >= self.local_batch_size:
+                priority = self.model.compute_priority(
+                    nested_utils.collate_nested(self.collate_fn, batch))
+                self.replay_buffer.extend(batch, priority)
+                batch.clear()
+        if len(batch) > 0:
             priority = self.model.compute_priority(
-                batch, torch.tensor([self.gamma**self.multi_step]))
-            self.replay_buffer.extend(replay, priority)
-        self.trajectory = []
+                nested_utils.collate_nested(self.collate_fn, batch))
+            self.replay_buffer.extend(batch, priority)
+            batch.clear()
+        self.trajectory.clear()
 
     async def async_update(self) -> None:
-        if not self.trajectory[-1]["done"]:
+        if self.replay_buffer is None or not self.trajectory[-1]["done"]:
             return
-        if self.replay_buffer is not None:
-            replay = self.make_replay()
-            batch = nested_utils.collate_nested(self.collate_fn, replay)
+
+        replay = self.make_replay()
+        batch = []
+        for data in replay:
+            batch.append(data)
+            if len(batch) >= self.local_batch_size:
+                priority = await self.model.async_compute_priority(
+                    nested_utils.collate_nested(self.collate_fn, batch))
+                await self.replay_buffer.async_extend(batch, priority)
+                batch.clear()
+        if len(batch) > 0:
             priority = await self.model.async_compute_priority(
-                batch, torch.tensor([self.gamma**self.multi_step]))
-            await self.replay_buffer.async_extend(replay, priority)
-        self.trajectory = []
+                nested_utils.collate_nested(self.collate_fn, batch))
+            await self.replay_buffer.async_extend(batch, priority)
+            batch.clear()
+        self.trajectory.clear()
 
     def connect(self) -> None:
         super().connect()
@@ -183,24 +212,21 @@ class ApexDQNAgent(Agent):
             return None
 
         replay = []
-        append = replay.append
         for i in range(0, trajectory_len - 1):
+            k = min(self.multi_step, trajectory_len - 1 - i)
             cur = self.trajectory[i]
-            nxt = self.trajectory[min(i + self.multi_step, trajectory_len - 1)]
+            nxt = self.trajectory[i + k]
             obs = cur["obs"]
             act = cur["action"]
-            next_obs = nxt["obs"]
-            done = nxt["done"]
-            reward = 0.0
-            for j in range(min(self.multi_step, trajectory_len - 1 - i)):
-                reward += (self.gamma**j) * self.trajectory[i + j]["reward"]
-            append({
-                "obs": obs,
-                "action": act,
-                "reward": torch.tensor([reward]),
-                "next_obs": next_obs,
-                "done": torch.tensor([done]),
-            })
+            v = torch.zeros(1) if nxt["done"] else nxt["v"]
+            if self.reward_rescaler is not None:
+                v = self.reward_rescaler.recover(v)
+            target = (self.gamma**k) * v
+            for j in range(k):
+                target += (self.gamma**j) * self.trajectory[i + j]["reward"]
+            if self.reward_rescaler is not None:
+                target = self.reward_rescaler.rescale(target)
+            replay.append({"obs": obs, "action": act, "target": target})
 
         return replay
 
@@ -211,12 +237,10 @@ class ApexDQNAgent(Agent):
         batch = nested_utils.map_nested(lambda x: x.to(device), batch)
         self.optimizer.zero_grad()
 
-        td_err = self.model.td_error(
-            batch, torch.tensor([self.gamma**self.multi_step], device=device))
+        td_err = self.model.td_error(batch)
         weight = weight.to(device=device,
                            dtype=td_err.dtype)  # size = (batch_size)
-        loss = td_err.square() * weight * 0.5
-        loss = loss.mean()
+        loss = (td_err.square() * weight * 0.5).mean()
 
         loss.backward()
         grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(),
@@ -235,7 +259,7 @@ class ApexDQNAgent(Agent):
         self.training_variables["update_fut"] = update_fut
 
         return {
-            "reward": batch["reward"].detach().mean().item(),
+            "td_err": td_err.detach().mean().item(),
             "loss": loss.detach().mean().item(),
             "grad_norm": grad_norm.detach().mean().item(),
         }
@@ -250,13 +274,15 @@ class ApexDQNAgentFactory(AgentFactory):
         replay_buffer: Optional[ReplayBufferLike] = None,
         controller: Optional[ControllerLike] = None,
         optimizer: Optional[torch.optim.Optimizer] = None,
-        batch_size: int = 128,
+        batch_size: int = 512,
+        local_batch_size: int = 1024,
         grad_clip: float = 50.0,
         multi_step: int = 1,
         gamma: float = 0.99,
+        reward_rescaling: bool = True,
         learning_starts: Optional[int] = None,
-        sync_every_n_steps: int = 10,
-        push_every_n_steps: int = 1,
+        sync_every_n_steps: int = 2500,
+        push_every_n_steps: int = 10,
         collate_fn: Optional[Callable[[Sequence[NestedTensor]],
                                       NestedTensor]] = None,
         additional_models_to_update: Optional[List[ModelLike]] = None,
@@ -267,16 +293,18 @@ class ApexDQNAgentFactory(AgentFactory):
         self._controller = controller
         self._optimizer = optimizer
         self._batch_size = batch_size
+        self._local_batch_size = local_batch_size
         self._grad_clip = grad_clip
         self._multi_step = multi_step
         self._gamma = gamma
+        self._reward_rescaling = reward_rescaling
         self._learning_starts = learning_starts
         self._sync_every_n_steps = sync_every_n_steps
         self._push_every_n_steps = push_every_n_steps
         self._collate_fn = collate_fn
         self._additional_models_to_update = additional_models_to_update
 
-    def __call__(self, index: int):
+    def __call__(self, index: int) -> ApexDQNAgent:
         model = self._make_arg(self._model, index)
         eps = self._eps_func(index)
         replay_buffer = self._make_arg(self._replay_buffer, index)
@@ -288,9 +316,11 @@ class ApexDQNAgentFactory(AgentFactory):
             controller,
             self._optimizer,
             self._batch_size,
+            self._local_batch_size,
             self._grad_clip,
             self._multi_step,
             self._gamma,
+            self._reward_rescaling,
             self._learning_starts,
             self._sync_every_n_steps,
             self._push_every_n_steps,

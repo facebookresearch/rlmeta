@@ -32,7 +32,7 @@ lr: 3e-4
 multi_step: 3
 learning_starts: 65536
 
-sync_every_n_steps: 100
+sync_every_n_steps: 2500
 push_every_n_steps: 10
 
 num_epochs: 1000
