@@ -3,7 +3,8 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from enum import IntEnum
+from dataclasses import dataclass
+from enum import IntFlag
 from typing import Dict, Optional, Union
 
 import rlmeta.core.remote as remote
@@ -11,69 +12,69 @@ import rlmeta.core.remote as remote
 from rlmeta.utils.stats_dict import StatsDict
 
 
-class Phase(IntEnum):
+class Phase(IntFlag):
     NONE = 0
     TRAIN = 1
     EVAL = 2
+    BOTH = 3
 
 
 class Controller(remote.Remotable):
 
+    @dataclass
+    class PhaseStatus:
+        limit: Optional[int] = None
+        count: int = 0
+        stats: StatsDict = StatsDict()
+
     def __init__(self, identifier: Optional[str] = None) -> None:
         super().__init__(identifier)
         self._phase = Phase.NONE
-        self._count = 0
-        self._limit = None
-        self._stats = StatsDict()
+        self._status = [
+            Controller.PhaseStatus(limit=None, count=0, stats=StatsDict())
+            for _ in range(len(Phase))
+        ]
 
     def __repr__(self):
         return f"Controller(phase={self._phase})"
 
-    @property
+    @remote.remote_method(batch_size=None)
+    def reset(self) -> None:
+        self._phase = Phase.NONE
+        for status in self._status:
+            status.limit = None
+            status.count = 0
+            status.stats.clear()
+
+    @remote.remote_method(batch_size=None)
     def phase(self) -> Phase:
         return self._phase
 
-    @property
-    def count(self) -> int:
-        return self._count
-
-    @property
-    def stats(self) -> StatsDict:
-        return self._stats
-
     @remote.remote_method(batch_size=None)
-    def reset(self) -> None:
-        self.set_phase(Phase.NONE, reset=True)
-
-    @remote.remote_method(batch_size=None)
-    def get_phase(self) -> Phase:
-        return self.phase
-
-    @remote.remote_method(batch_size=None)
-    def set_phase(self,
-                  phase: Phase,
-                  limit: Optional[int] = None,
-                  reset: bool = False) -> None:
+    def set_phase(self, phase: Phase) -> None:
         self._phase = phase
-        self._limit = limit
-        if reset:
-            self._count = 0
-            self._stats.reset()
 
     @remote.remote_method(batch_size=None)
-    def get_count(self) -> int:
-        return self.count
+    def reset_phase(self, phase: Phase, limit: Optional[int] = None) -> None:
+        status = self._status[phase]
+        status.limit = limit
+        status.count = 0
+        status.stats.reset()
 
     @remote.remote_method(batch_size=None)
-    def get_stats(self) -> StatsDict:
-        return self.stats
+    def count(self, phase: Phase) -> int:
+        return self._status[phase].count
+
+    @remote.remote_method(batch_size=None)
+    def stats(self, phase: Phase) -> StatsDict:
+        return self._status[phase].stats
 
     @remote.remote_method(batch_size=None)
     def add_episode(self, phase: Phase, stats: Dict[str, float]) -> None:
-        if phase == self._phase and (self._limit is None or
-                                     self._count < self._limit):
-            self._count += 1
-            self._stats.extend(stats)
+        status = self._status[phase]
+        if status.limit is None or status.count < status.limit:
+            status.count += 1
+            status.stats.extend(stats)
 
 
 ControllerLike = Union[Controller, remote.Remote]

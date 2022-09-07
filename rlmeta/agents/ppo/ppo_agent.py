@@ -133,7 +133,7 @@ class PPOAgent(Agent):
         self.trajectory = []
 
     def train(self, num_steps: int) -> Optional[StatsDict]:
-        self.controller.set_phase(Phase.TRAIN, reset=True)
+        self.controller.set_phase(Phase.TRAIN)
 
         self.replay_buffer.warm_up(self.learning_starts)
         stats = StatsDict()
@@ -156,16 +156,23 @@ class PPOAgent(Agent):
             if self.step_counter % self.push_every_n_steps == 0:
                 self.model.push()
 
-        episode_stats = self.controller.get_stats()
+        episode_stats = self.controller.stats(Phase.TRAIN)
         stats.update(episode_stats)
+        self.controller.reset_phase(Phase.TRAIN)
 
         return stats
 
-    def eval(self, num_episodes: Optional[int] = None) -> Optional[StatsDict]:
-        self.controller.set_phase(Phase.EVAL, limit=num_episodes, reset=True)
-        while self.controller.get_count() < num_episodes:
+    def eval(self,
+             num_episodes: Optional[int] = None,
+             keep_training_loops: bool = False) -> Optional[StatsDict]:
+        if keep_training_loops:
+            self.controller.set_phase(Phase.BOTH)
+        else:
+            self.controller.set_phase(Phase.EVAL)
+        self.controller.reset_phase(Phase.EVAL, limit=num_episodes)
+        while self.controller.count(Phase.EVAL) < num_episodes:
             time.sleep(1)
-        stats = self.controller.get_stats()
+        stats = self.controller.stats(Phase.EVAL)
         return stats
 
     def device(self) -> torch.device:

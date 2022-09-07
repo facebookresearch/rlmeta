@@ -107,7 +107,7 @@ def main(cfg):
                 stats.json(info, phase="Train", epoch=epoch, time=cur_time))
         time.sleep(1)
 
-        stats = agent.eval(cfg.num_eval_episodes)
+        stats = agent.eval(cfg.num_eval_episodes, keep_training_loops=True)
         cur_time = time.perf_counter() - start_time
         info = f"E Epoch {epoch}"
         if cfg.table_view:
