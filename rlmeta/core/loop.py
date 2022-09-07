@@ -159,8 +159,9 @@ class AsyncLoop(Loop, Launchable):
 
     async def _check_phase(self) -> NoReturn:
         while True:
-            cur_phase = await self._controller.async_get_phase()
-            self._running = (cur_phase == self._running_phase)
+            cur_phase = await self._controller.async_phase()
+            self._running = ((cur_phase &
+                              self._running_phase) == self._running_phase)
             await asyncio.sleep(1)
 
     async def _run_loop(

@@ -209,7 +209,7 @@ class PrioritizedReplayBuffer(ReplayBuffer):
             self._max_priority = max(self._max_priority, priority)
         elif mask is None:
             self._max_priority = max(self._max_priority, priority.max().item())
-        else:
+        elif mask.sum().item() > 0:
             self._max_priority = max(self._max_priority,
                                      priority[mask].max().item())
         priority = priority**self.alpha
