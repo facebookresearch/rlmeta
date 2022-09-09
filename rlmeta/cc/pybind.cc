@@ -5,10 +5,13 @@
 
 #include <pybind11/pybind11.h>
 
-#include "rlmeta/cc/circular_buffer.h"
-#include "rlmeta/cc/nested_utils.h"
-#include "rlmeta/cc/segment_tree_pybind.h"
-#include "rlmeta/cc/timestamp_manager.h"
+#include "rlmeta/cc/nested_utils/nested_utils.h"
+#include "rlmeta/cc/samplers/prioritized_sampler.h"
+#include "rlmeta/cc/samplers/sampler.h"
+#include "rlmeta/cc/samplers/uniform_sampler.h"
+#include "rlmeta/cc/storage/circular_buffer.h"
+#include "rlmeta/cc/storage/tensor_circular_buffer.h"
+#include "rlmeta/cc/utils/segment_tree_pybind.h"
 
 namespace py = pybind11;
 
@@ -19,8 +22,13 @@ PYBIND11_MODULE(_rlmeta_extension, m) {
   rlmeta::DefineSumSegmentTree<double>("Fp64", m);
 
   rlmeta::DefineCircularBuffer(m);
+  rlmeta::DefineTensorCircularBuffer(m);
+
   rlmeta::DefineNestedUtils(m);
-  rlmeta::DefineTimestampManager(m);
+
+  rlmeta::DefineSampler(m);
+  rlmeta::DefineUniformSampler(m);
+  rlmeta::DefinePrioritizedSampler(m);
 }
 
 }  // namespace

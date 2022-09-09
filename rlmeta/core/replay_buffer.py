@@ -19,48 +19,54 @@ import rlmeta.utils.nested_utils as nested_utils
 from rlmeta.core.launchable import Launchable
 from rlmeta.core.server import Server
 from rlmeta.core.types import Tensor, NestedTensor
-from rlmeta.data import CircularBuffer
-from rlmeta.data import SumSegmentTree
-from rlmeta.data import TimestampManager
+from rlmeta.storage import Storage
+from rlmeta.samplers import Sampler
 
 console = Console()
+
+# The design of ReplayBuffer is inspired from DeepMind's Reverb project.
+#
+# https://github.com/deepmind/reverb
+#
+# Copyright 2019 DeepMind Technologies Limited.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 
 
 class ReplayBuffer(remote.Remotable, Launchable):
 
     def __init__(self,
-                 capacity: int,
-                 collate_fn: Optional[Callable[[Sequence[NestedTensor]],
-                                               NestedTensor]] = None,
-                 identifier: Optional[str] = None):
+                 storage: Storage,
+                 sampler: Sampler,
+                 identifier: Optional[str] = None) -> None:
         remote.Remotable.__init__(self, identifier)
 
-        self._buffer = CircularBuffer(capacity)
-        if collate_fn is not None:
-            self._collate_fn = collate_fn
-        else:
-            self._collate_fn = data_utils.stack_tensors
+        self._storage = storage
+        self._sampler = sampler
 
     def __len__(self) -> int:
-        return len(self._buffer)
+        return len(self._storage)
 
-    def __getitem__(self, index: Union[int, Tensor]) -> NestedTensor:
-        data = self._buffer[index]
-        if not isinstance(index, int):
-            data = nested_utils.collate_nested(self._collate_fn, data)
-        return data
-
-    @property
-    def size(self) -> int:
-        return self._buffer.size
+    def __getitem__(self, key: Union[int, Tensor]) -> NestedTensor:
+        return self._storage[key]
 
     @property
     def capacity(self) -> int:
-        return self._buffer.capacity
+        return self._storage.capacity
 
     @property
-    def cursor(self) -> int:
-        return self._buffer.cursor
+    def size(self) -> int:
+        return self._storage.size
 
     def init_launching(self) -> None:
         pass
@@ -69,210 +75,52 @@ class ReplayBuffer(remote.Remotable, Launchable):
         pass
 
     @remote.remote_method(batch_size=None)
-    def get_size(self) -> int:
-        return self.size
+    def info(self) -> Tuple[int, int]:
+        return self.size, self.capacity
 
     @remote.remote_method(batch_size=None)
-    def get_capacity(self) -> int:
-        return self.capacity
+    def clear(self) -> None:
+        self._storage.clear()
+        self._sampler.reset()
 
     @remote.remote_method(batch_size=None)
-    def append(self, data: NestedTensor) -> None:
-        self._append(data)
-
-    @remote.remote_method(batch_size=None)
-    def extend(self, data: Sequence[NestedTensor]) -> None:
-        self._extend(data)
-
-    @remote.remote_method(batch_size=None)
-    def sample(self, batch_size: int) -> NestedTensor:
-        index = np.random.randint(0, self.size, size=batch_size)
-        return self.__getitem__(index)
-
-    def _append(self, data: NestedTensor) -> int:
-        return self._buffer.append(data)
-
-    def _extend(self, data: Sequence[NestedTensor]) -> np.ndarray:
-        return self._buffer.extend(data)
-
-
-class PrioritizedReplayBuffer(ReplayBuffer):
-
-    def __init__(self,
-                 capacity: int,
-                 alpha: float,
-                 beta: float,
-                 eps: float = 1e-8,
-                 collate_fn: Optional[Callable[[Sequence[NestedTensor]],
-                                               NestedTensor]] = None,
-                 priority_type: np.dtype = np.float64,
-                 identifier: Optional[str] = None) -> None:
-        super().__init__(capacity, collate_fn, identifier)
-
-        assert alpha > 0
-        assert beta >= 0
-        self._alpha = alpha
-        self._beta = beta
-        self._eps = eps
-
-        self._priority_type = priority_type
-        self._sum_tree = SumSegmentTree(capacity, dtype=priority_type)
-        self._max_priority = 1.0
-
-        self._timestamps = TimestampManager(capacity)
-
-    def __getitem__(
-        self, index: Union[int, Tensor]
-    ) -> Tuple[NestedTensor, Union[float, torch.Tensor]]:
-        data = super().__getitem__(index)
-        weight = self._compute_weight(index)
-        return data, weight
-
-    @property
-    def alpha(self) -> float:
-        return self._alpha
-
-    @property
-    def beta(self) -> float:
-        return self._beta
-
-    @property
-    def eps(self) -> float:
-        return self._eps
-
-    @property
-    def priority_type(self) -> np.dtype:
-        return self._priority_type
-
-    @property
-    def max_priority(self) -> float:
-        return self._max_priority
-
-    @property
-    def current_timestamp(self) -> int:
-        return self._timestamps.current_timestamp
-
-    @remote.remote_method(batch_size=None)
-    def append(self,
-               data: NestedTensor,
-               priority: Optional[Union[float, Tensor]] = None) -> None:
-        self._append(data, priority)
+    def append(self, data: NestedTensor, priority: float = 1.0) -> int:
+        new_key, old_key = self._storage.append(data)
+        self._sampler.insert(new_key, priority)
+        if old_key is not None:
+            self._sampler.delete(old_key)
+        return new_key
 
     @remote.remote_method(batch_size=None)
     def extend(self,
                data: Sequence[NestedTensor],
-               priority: Optional[Union[float, Tensor]] = None) -> None:
-        self._extend(data, priority)
+               priorities: Union[float, Tensor] = 1.0) -> torch.Tensor:
+        new_keys, old_keys = self._storage.extend(data)
+        if isinstance(priorities, torch.Tensor):
+            priorities = priorities.numpy().astype(np.float64)
+        elif isinstance(priorities, np.ndarray):
+            priorities = priorities.astype(np.float64)
+        self._sampler.insert(new_keys, priorities)
+        self._sampler.delete(old_keys)
+        return torch.from_numpy(new_keys)
 
     @remote.remote_method(batch_size=None)
-    def sample(
-        self, batch_size: int
-    ) -> Tuple[NestedTensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        data, weight, index, timestamp = self._sample(batch_size)
-        return data, weight, torch.from_numpy(index), torch.from_numpy(
-            timestamp)
+    def sample(self,
+               num: int) -> Tuple[torch.Tensor, NestedTensor, torch.Tensor]:
+        keys, probabilities = self._sampler.sample(num)
+        values = self._storage[keys]
+        return torch.from_numpy(keys), values, torch.from_numpy(probabilities)
 
     @remote.remote_method(batch_size=None)
-    def update_priority(self,
-                        index: Union[int, Tensor],
-                        priority: Union[float, Tensor],
-                        timestamp: Optional[Union[int, Tensor]] = None) -> None:
-        self._update_priority(index, priority, timestamp)
-
-    def warm_up(self, learning_starts: Optional[int] = None) -> None:
-        capacity = self.get_capacity()
-        target_size = capacity
-        if learning_starts is not None:
-            target_size = min(target_size, learning_starts)
-        width = len(str(capacity)) + 1
-        cur_size = self.get_size()
-        while cur_size < target_size:
-            time.sleep(1)
-            cur_size = self.get_size()
-            logging.info("Warming up replay buffer: " +
-                         f"[{cur_size: {width}d} / {capacity} ]")
-
-    def _init_priority(self, index) -> None:
-        priority = self._max_priority**self.alpha
-        self._sum_tree[index] = priority
-
-    def _update_priority(
-            self,
-            index: Union[int, Tensor],
-            priority: Union[float, Tensor],
-            timestamp: Optional[Union[int, Tensor]] = None) -> None:
-        mask = self._timestamps.is_available(
-            index, timestamp) if timestamp is not None else None
-
-        priority += self.eps
-        if isinstance(priority, float):
-            self._max_priority = max(self._max_priority, priority)
-        elif mask is None:
-            self._max_priority = max(self._max_priority, priority.max().item())
-        elif mask.sum().item() > 0:
-            self._max_priority = max(self._max_priority,
-                                     priority[mask].max().item())
-        priority = priority**self.alpha
-
-        if isinstance(priority, np.ndarray):
-            priority = priority.astype(self.priority_type)
-        elif isinstance(priority, torch.Tensor):
-            priority = priority.to(
-                data_utils.numpy_dtype_to_torch(self.priority_type))
-
-        if isinstance(index, int):
-            if mask is None or mask:
-                self._sum_tree[index] = priority
-        else:
-            self._sum_tree.update(index, priority, mask)
-
-    def _compute_weight(
-            self, index: Union[int, Tensor]) -> Union[float, torch.Tensor]:
-        p = self._sum_tree[index]
-        if isinstance(p, np.ndarray):
-            p = torch.from_numpy(p)
-
-        # Importance sampling weight formula:
-        #   w_i = (p_i / sum(p) * N) ^ (-beta)
-        #   weight_i = w_i / max(w)
-        #   weight_i = (p_i / sum(p) * N) ^ (-beta) /
-        #       ((min(p) / sum(p) * N) ^ (-beta))
-        #   weight_i = ((p_i / sum(p) * N) / (min(p) / sum(p) * N)) ^ (-beta)
-        #   weight_i = (p_i / min(p)) ^ (-beta)
-        return p.div_(p.min()).pow_(-self.beta)
-
-    def _append(self,
-                data: NestedTensor,
-                priority: Optional[Union[float, Tensor]] = None) -> int:
-        index = super()._append(data)
-        if priority is None:
-            self._init_priority(index)
-        else:
-            self._update_priority(index, priority)
-        self._timestamps.update(index)
-        return index
-
-    def _extend(self,
-                data: Sequence[NestedTensor],
-                priority: Optional[Union[float, Tensor]] = None) -> np.ndarray:
-        index = super()._extend(data)
-        if priority is None:
-            self._init_priority(index)
-        else:
-            self._update_priority(index, priority)
-        self._timestamps.update(index)
-        return index
-
-    def _sample(
-        self, batch_size: int
-    ) -> Tuple[NestedTensor, torch.Tensor, np.ndarray, np.ndarray]:
-        p_sum = self._sum_tree.query(0, self.capacity)
-        mass = np.random.uniform(0.0, p_sum,
-                                 size=batch_size).astype(self.priority_type)
-        index = self._sum_tree.scan_lower_bound(mass)
-        data, weight = self.__getitem__(index)
-        timestamp = self._timestamps[index]
-        return data, weight, index, timestamp
+    def update(self, key: Union[int, Tensor], priority: Union[float,
+                                                              Tensor]) -> None:
+        if isinstance(key, torch.Tensor):
+            key = key.numpy()
+        if isinstance(priority, torch.Tensor):
+            priority = priority.numpy().astype(np.float64)
+        elif isinstance(priority, np.ndarray):
+            priority = priority.astype(np.float64)
+        self._sampler.update(key, priority)
 
 
 class RemoteReplayBuffer(remote.Remote):
@@ -337,17 +185,16 @@ class RemoteReplayBuffer(remote.Remote):
         return ret
 
     def warm_up(self, learning_starts: Optional[int] = None) -> None:
-        capacity = self.get_capacity()
+        size, capacity = self.info()
         target_size = capacity
         if learning_starts is not None:
             target_size = min(target_size, learning_starts)
         width = len(str(capacity)) + 1
-        cur_size = self.get_size()
-        while cur_size < target_size:
+        while size < target_size:
             time.sleep(1)
-            cur_size = self.get_size()
+            size, capacity = self.info()
             console.log("Warming up replay buffer: " +
-                        f"[{cur_size: {width}d} / {capacity} ]")
+                        f"[{size: {width}d} / {capacity} ]")
 
 
 ReplayBufferLike = Union[ReplayBuffer, RemoteReplayBuffer]

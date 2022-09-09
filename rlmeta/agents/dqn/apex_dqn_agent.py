@@ -9,6 +9,7 @@ from typing import Callable, Dict, List, Optional, Sequence
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from rich.console import Console
 from rich.progress import track
@@ -42,6 +43,7 @@ class ApexDQNAgent(Agent):
         grad_clip: float = 50.0,
         multi_step: int = 1,
         gamma: float = 0.99,
+        importance_sampling_exponent: float = 0.4,
         reward_rescaling: bool = True,
         learning_starts: Optional[int] = None,
         sync_every_n_steps: int = 2500,
@@ -65,6 +67,7 @@ class ApexDQNAgent(Agent):
 
         self.multi_step = multi_step
         self.gamma = gamma
+        self.importance_sampling_exponent = importance_sampling_exponent
         self.reward_rescaling = reward_rescaling
         self.reward_rescaler = SqrtRescaler() if reward_rescaling else None
         self.learning_starts = learning_starts
@@ -118,7 +121,7 @@ class ApexDQNAgent(Agent):
         if self.replay_buffer is None or not self.trajectory[-1]["done"]:
             return
 
-        replay = self.make_replay()
+        replay = self._make_replay()
         batch = []
         for data in replay:
             batch.append(data)
@@ -138,7 +141,7 @@ class ApexDQNAgent(Agent):
         if self.replay_buffer is None or not self.trajectory[-1]["done"]:
             return
 
-        replay = self.make_replay()
+        replay = self._make_replay()
         batch = []
         for data in replay:
             batch.append(data)
@@ -169,10 +172,10 @@ class ApexDQNAgent(Agent):
         console.log(f"Training for num_steps = {num_steps}")
         for _ in track(range(num_steps), description="Training..."):
             t0 = time.perf_counter()
-            batch, weight, index, timestamp = self.replay_buffer.sample(
+            keys, batch, probabilities = self.replay_buffer.sample(
                 self.batch_size)
             t1 = time.perf_counter()
-            step_stats = self.train_step(batch, weight, index, timestamp)
+            step_stats = self._train_step(keys, batch, probabilities)
             t2 = time.perf_counter()
             time_stats = {
                 "sample_data_time/ms": (t1 - t0) * 1000.0,
@@ -213,7 +216,7 @@ class ApexDQNAgent(Agent):
         stats = self.controller.stats(Phase.EVAL)
         return stats
 
-    def make_replay(self) -> Optional[List[NestedTensor]]:
+    def _make_replay(self) -> Optional[List[NestedTensor]]:
         trajectory_len = len(self.trajectory)
         if trajectory_len < 2:
             return None
@@ -237,23 +240,30 @@ class ApexDQNAgent(Agent):
 
         return replay
 
-    def train_step(self, batch: NestedTensor, weight: torch.Tensor,
-                   index: torch.Tensor,
-                   timestamp: torch.Tensor) -> Dict[str, float]:
+    def _train_step(self, keys: torch.Tensor, batch: NestedTensor,
+                    probabilities: torch.Tensor) -> Dict[str, float]:
         device = next(self.model.parameters()).device
         batch = nested_utils.map_nested(lambda x: x.to(device), batch)
         self.optimizer.zero_grad()
 
-        td_err = self.model.td_error(batch)
-        weight = weight.to(device=device,
-                           dtype=td_err.dtype)  # size = (batch_size)
-        loss = (td_err.square() * weight * 0.5).mean()
+        obs = batch["obs"]
+        action = batch["action"]
+        target = batch["target"]
 
+        q = self.model.q(obs, action)
+        probabilities = probabilities.to(dtype=q.dtype, device=device)
+        weight = probabilities.pow(-self.importance_sampling_exponent)
+        weight.div_(weight.max())
+
+        loss = F.huber_loss(q, target, reduction="none").squeeze(-1)
+        loss = (loss * weight).mean()
         loss.backward()
         grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(),
                                                    self.grad_clip)
         self.optimizer.step()
-        priority = td_err.detach().abs().cpu()
+
+        td_err = (target - q).squeeze(-1)
+        priorities = td_err.detach().abs().cpu()
 
         # Wait for previous update request
         if "update_fut" in self.training_variables:
@@ -261,8 +271,7 @@ class ApexDQNAgent(Agent):
 
         # Async update to start next training step when waiting for updating
         # priorities.
-        update_fut = self.replay_buffer.async_update_priority(
-            index, priority, timestamp)
+        update_fut = self.replay_buffer.async_update(keys, priorities)
         self.training_variables["update_fut"] = update_fut
 
         return {
@@ -283,9 +292,10 @@ class ApexDQNAgentFactory(AgentFactory):
         optimizer: Optional[torch.optim.Optimizer] = None,
         batch_size: int = 512,
         local_batch_size: int = 1024,
-        grad_clip: float = 50.0,
+        grad_clip: float = 40.0,
         multi_step: int = 1,
         gamma: float = 0.99,
+        importance_sampling_exponent: float = 0.4,
         reward_rescaling: bool = True,
         learning_starts: Optional[int] = None,
         sync_every_n_steps: int = 2500,
@@ -304,6 +314,7 @@ class ApexDQNAgentFactory(AgentFactory):
         self._grad_clip = grad_clip
         self._multi_step = multi_step
         self._gamma = gamma
+        self._importance_sampling_exponent = importance_sampling_exponent
         self._reward_rescaling = reward_rescaling
         self._learning_starts = learning_starts
         self._sync_every_n_steps = sync_every_n_steps
@@ -327,6 +338,7 @@ class ApexDQNAgentFactory(AgentFactory):
             self._grad_clip,
             self._multi_step,
             self._gamma,
+            self._importance_sampling_exponent,
             self._reward_rescaling,
             self._learning_starts,
             self._sync_every_n_steps,

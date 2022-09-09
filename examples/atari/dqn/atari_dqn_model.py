@@ -59,6 +59,11 @@ class AtariDQNModel(DQNModel):
     def forward(self, obs: torch.Tensor) -> torch.Tensor:
         return self.online_net(obs)
 
+    def q(self, s: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
+        q = self.online_net(s)
+        q = q.gather(dim=-1, index=a)
+        return q
+
     @remote.remote_method(batch_size=128)
     def act(self, obs: torch.Tensor, eps: torch.Tensor) -> torch.Tensor:
         device = next(self.parameters()).device
@@ -81,8 +86,7 @@ class AtariDQNModel(DQNModel):
         obs = batch["obs"]
         action = batch["action"]
         target = batch["target"]
-        q = self.online_net(obs)
-        q = q.gather(dim=-1, index=action)
+        q = self.q(obs, action)
         return (target - q).squeeze(-1)
 
     @remote.remote_method(batch_size=None)
