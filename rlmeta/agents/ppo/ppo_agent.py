@@ -122,7 +122,7 @@ class PPOAgent(Agent):
         if self.replay_buffer is not None:
             replay = self._make_replay()
             self.replay_buffer.extend(replay)
-        self.trajectory = []
+        self.trajectory.clear()
 
     async def async_update(self) -> None:
         if not self.done:
@@ -130,7 +130,7 @@ class PPOAgent(Agent):
         if self.replay_buffer is not None:
             replay = self._make_replay()
             await self.replay_buffer.async_extend(replay)
-        self.trajectory = []
+        self.trajectory.clear()
 
     def train(self, num_steps: int) -> Optional[StatsDict]:
         self.controller.set_phase(Phase.TRAIN)
@@ -141,7 +141,7 @@ class PPOAgent(Agent):
         console.log(f"Training for num_steps = {num_steps}")
         for _ in track(range(num_steps), description="Training..."):
             t0 = time.perf_counter()
-            batch = self.replay_buffer.sample(self.batch_size)
+            _, batch, _ = self.replay_buffer.sample(self.batch_size)
             t1 = time.perf_counter()
             step_stats = self._train_step(batch)
             t2 = time.perf_counter()

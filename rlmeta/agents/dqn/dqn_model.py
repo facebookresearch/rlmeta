@@ -19,10 +19,23 @@ class DQNModel(RemotableModel):
     @abc.abstractmethod
     def forward(self, obs: torch.Tensor, *args, **kwargs) -> torch.Tensor:
         """
-        Forward function for PPO model.
+        Forward function for DQN model.
 
         Args:
             obs: A torch.Tensor for observation.
+
+        Returns:
+            q: The Q(s, a) value for each action in the current state.
+        """
+
+    @abc.abstractmethod
+    def q(self, s: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
+        """
+        Q function for DQN model.
+
+        Args:
+            s: A torch.Tensor for observation.
+            a: A torch.Tensor for action.
 
         Returns:
             q: The Q(s, a) value for each action in the current state.

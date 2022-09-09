@@ -8,13 +8,38 @@
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 
+#include <algorithm>
 #include <functional>
+#include <string>
+#include <vector>
 
 namespace py = pybind11;
 
 namespace rlmeta {
 
 namespace nested_utils {
+
+template <class Dict>
+inline std::vector<std::string> SortedKeys(const Dict& dict) {
+  std::vector<std::string> ret;
+  ret.reserve(dict.size());
+  for (const auto [k, v] : dict) {
+    ret.push_back(k);
+  }
+  std::sort(ret.begin(), ret.end());
+  return ret;
+}
+
+template <>
+inline std::vector<std::string> SortedKeys<py::dict>(const py::dict& dict) {
+  std::vector<std::string> ret;
+  ret.reserve(dict.size());
+  for (const auto [k, v] : dict) {
+    ret.push_back(py::reinterpret_borrow<py::str>(k));
+  }
+  std::sort(ret.begin(), ret.end());
+  return ret;
+}
 
 py::tuple FlattenNested(const py::object& obj);
 

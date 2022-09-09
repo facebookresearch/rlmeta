@@ -23,9 +23,10 @@ from rlmeta.agents.dqn import (ApexDQNAgent, ApexDQNAgentFactory,
 from rlmeta.core.controller import Phase, Controller
 from rlmeta.core.loop import LoopList, ParallelLoop
 from rlmeta.core.model import wrap_downstream_model
-from rlmeta.core.replay_buffer import PrioritizedReplayBuffer
-from rlmeta.core.replay_buffer import make_remote_replay_buffer
+from rlmeta.core.replay_buffer import ReplayBuffer, make_remote_replay_buffer
 from rlmeta.core.server import Server, ServerList
+from rlmeta.samplers import PrioritizedSampler
+from rlmeta.storage import TensorCircularBuffer
 
 
 @hydra.main(config_path="./conf", config_name="conf_apex_dqn")
@@ -39,7 +40,8 @@ def main(cfg):
     infer_model = copy.deepcopy(train_model).to(cfg.infer_device)
 
     ctrl = Controller()
-    rb = PrioritizedReplayBuffer(cfg.replay_buffer_size, cfg.alpha, cfg.beta)
+    rb = ReplayBuffer(TensorCircularBuffer(cfg.replay_buffer_size),
+                      PrioritizedSampler(priority_exponent=cfg.alpha))
 
     m_server = Server(cfg.m_server_name, cfg.m_server_addr)
     r_server = Server(cfg.r_server_name, cfg.r_server_addr)
@@ -74,6 +76,7 @@ def main(cfg):
                          optimizer=optimizer,
                          batch_size=cfg.batch_size,
                          multi_step=cfg.multi_step,
+                         importance_sampling_exponent=cfg.beta,
                          learning_starts=cfg.get("learning_starts", None),
                          sync_every_n_steps=cfg.sync_every_n_steps,
                          push_every_n_steps=cfg.push_every_n_steps)
