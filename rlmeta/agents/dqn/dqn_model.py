@@ -42,7 +42,7 @@ class DQNModel(RemotableModel):
         """
 
     @abc.abstractmethod
-    def act(self, obs: torch.Tensor, eps: torch.Tensor, *args,
+    def act(self, obs: NestedTensor, eps: torch.Tensor, *args,
             **kwargs) -> Tuple[torch.Tensor, torch.Tensor]:
         """
         Act function will be called remotely by the agent.
@@ -55,16 +55,18 @@ class DQNModel(RemotableModel):
 
         Returns:
             action: The final action selected by the model.
+            v: The value estimation of current state by max(Q(s, a)).
         """
 
     @abc.abstractmethod
-    def td_error(self, batch: NestedTensor,
-                 gamma: torch.Tensor) -> torch.Tensor:
+    def td_error(self, obs: NestedTensor, action: torch.Tensor,
+                 target: torch.Tensor) -> torch.Tensor:
         """
         """
 
     @abc.abstractmethod
-    def compute_priority(self, batch: NestedTensor) -> torch.Tensor:
+    def compute_priority(self, obs: NestedTensor, action: torch.Tensor,
+                         target: torch.Tensor) -> torch.Tensor:
         """
         """
 

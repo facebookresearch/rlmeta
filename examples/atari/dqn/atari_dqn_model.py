@@ -82,18 +82,17 @@ class AtariDQNModel(DQNModel):
 
             return action.cpu(), v.cpu()
 
-    def td_error(self, batch: NestedTensor) -> torch.Tensor:
-        obs = batch["obs"]
-        action = batch["action"]
-        target = batch["target"]
+    def td_error(self, obs: NestedTensor, action: torch.Tensor,
+                 target: torch.Tensor) -> torch.Tensor:
         q = self.q(obs, action)
         return (target - q).squeeze(-1)
 
     @remote.remote_method(batch_size=None)
-    def compute_priority(self, batch: NestedTensor) -> torch.Tensor:
+    def compute_priority(self, obs: NestedTensor, action: torch.Tensor,
+                         target: torch.Tensor) -> torch.Tensor:
         device = next(self.parameters()).device
-        batch = nested_utils.map_nested(lambda x: x.to(device), batch)
-        err = self.td_error(batch)
+        obs = nested_utils.map_nested(lambda x: x.to(device), obs)
+        err = self.td_error(obs, action.to(device), target.to(device))
         return err.abs().cpu()
 
     def sync_target_net(self) -> None:
