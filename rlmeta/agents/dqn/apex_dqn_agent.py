@@ -126,14 +126,16 @@ class ApexDQNAgent(Agent):
         for data in replay:
             batch.append(data)
             if len(batch) >= self.local_batch_size:
-                priority = self.model.compute_priority(
-                    nested_utils.collate_nested(self.collate_fn, batch))
-                self.replay_buffer.extend(batch, priority)
+                b = nested_utils.collate_nested(self.collate_fn, batch)
+                priorities = self.model.compute_priority(
+                    b["obs"], b["action"], b["target"])
+                self.replay_buffer.extend(batch, priorities)
                 batch.clear()
         if len(batch) > 0:
-            priority = self.model.compute_priority(
-                nested_utils.collate_nested(self.collate_fn, batch))
-            self.replay_buffer.extend(batch, priority)
+            b = nested_utils.collate_nested(self.collate_fn, batch)
+            priorities = self.model.compute_priority(b["obs"], b["action"],
+                                                     b["target"])
+            self.replay_buffer.extend(batch, priorities)
             batch.clear()
         self.trajectory.clear()
 
@@ -146,14 +148,16 @@ class ApexDQNAgent(Agent):
         for data in replay:
             batch.append(data)
             if len(batch) >= self.local_batch_size:
-                priority = await self.model.async_compute_priority(
-                    nested_utils.collate_nested(self.collate_fn, batch))
-                await self.replay_buffer.async_extend(batch, priority)
+                b = nested_utils.collate_nested(self.collate_fn, batch)
+                priorities = await self.model.async_compute_priority(
+                    b["obs"], b["action"], b["target"])
+                await self.replay_buffer.async_extend(batch, priorities)
                 batch.clear()
         if len(batch) > 0:
-            priority = await self.model.async_compute_priority(
-                nested_utils.collate_nested(self.collate_fn, batch))
-            await self.replay_buffer.async_extend(batch, priority)
+            b = nested_utils.collate_nested(self.collate_fn, batch)
+            priorities = await self.model.async_compute_priority(
+                b["obs"], b["action"], b["target"])
+            await self.replay_buffer.async_extend(batch, priorities)
             batch.clear()
         self.trajectory.clear()
 
