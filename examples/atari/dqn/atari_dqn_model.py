@@ -65,7 +65,8 @@ class AtariDQNModel(DQNModel):
         return q
 
     @remote.remote_method(batch_size=128)
-    def act(self, obs: torch.Tensor, eps: torch.Tensor) -> torch.Tensor:
+    def act(self, obs: torch.Tensor,
+            eps: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         device = next(self.parameters()).device
 
         with torch.no_grad():

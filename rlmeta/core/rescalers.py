@@ -18,6 +18,12 @@ class Rescaler(nn.Module, abc.ABC):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.rescale(x)
 
+    def reset(self) -> None:
+        pass
+
+    def update(self, x: torch.Tensor) -> None:
+        pass
+
     @abc.abstractmethod
     def rescale(self, x: torch.Tensor) -> torch.Tensor:
         """

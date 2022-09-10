@@ -31,7 +31,7 @@ class RunningRMS(nn.Module):
         return self._mean_square.sqrt()
 
     def rrms(self) -> torch.Tensor:
-        return self._mean_square.rsqrt()
+        return torch.nan_to_num(self._mean_square.rsqrt())
 
     def update(self, x: torch.Tensor) -> None:
         size = x.size()
