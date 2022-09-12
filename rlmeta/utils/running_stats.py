@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -27,11 +27,13 @@ class RunningRMS(nn.Module):
     def mean_square(self) -> torch.Tensor:
         return self._mean_square
 
-    def rms(self) -> torch.Tensor:
-        return self._mean_square.sqrt()
+    def rms(self, eps: Optional[float] = None) -> torch.Tensor:
+        return self._mean_square.sqrt() if eps is None else ((
+            self._mean_square + eps).sqrt())
 
-    def rrms(self) -> torch.Tensor:
-        return torch.nan_to_num(self._mean_square.rsqrt())
+    def rrms(self, eps: Optional[float] = None) -> torch.Tensor:
+        return self._mean_square.rsqrt() if eps is None else ((
+            self._mean_square + eps).rsqrt())
 
     def update(self, x: torch.Tensor) -> None:
         size = x.size()
@@ -70,11 +72,13 @@ class RunningMoments(nn.Module):
     def var(self, ddof: int = 0) -> torch.Tensor:
         return self._m2 / (self._m0 - ddof)
 
-    def std(self, ddof: int = 0) -> torch.Tensor:
-        return self.var(ddof).sqrt()
+    def std(self, ddof: int = 0, eps: Optional[float] = None) -> torch.Tensor:
+        return self.var(ddof).sqrt() if eps is None else (self.var(ddof) +
+                                                          eps).sqrt()
 
-    def rstd(self, ddof: int = 0) -> torch.Tensor:
-        return self.var(ddof).rsqrt()
+    def rstd(self, ddof: int = 0, eps: Optional[float] = None) -> torch.Tensor:
+        return self.var(ddof).rsqrt() if eps is None else (self.var(ddof) +
+                                                           eps).rsqrt()
 
     def update(self, x: torch.Tensor) -> None:
         size = x.size()

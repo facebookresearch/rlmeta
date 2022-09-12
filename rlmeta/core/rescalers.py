@@ -48,10 +48,19 @@ class IdentityRescaler(Rescaler):
 
 class RMSRescaler(Rescaler):
 
-    def __init__(self, size: Union[int, Tuple[int]]) -> None:
+    def __init__(self, size: Union[int, Tuple[int]], eps: float = 1e-8) -> None:
         super().__init__()
         self._size = size
+        self._eps = eps
         self._running_rms = RunningRMS(size)
+
+    @property
+    def size(self) -> Union[int, Tuple[int]]:
+        return self._size
+
+    @property
+    def eps(self) -> float:
+        return self._eps
 
     def reset(self) -> None:
         self._running_rms.reset()
@@ -60,20 +69,35 @@ class RMSRescaler(Rescaler):
         self._running_rms.update(x)
 
     def rescale(self, x: torch.Tensor) -> torch.Tensor:
-        return x if self._running_rms.count() <= 1 else (
-            x * self._running_rms.rrms())
+        return x * self._running_rms.rrms(self._eps)
 
     def recover(self, x: torch.Tensor) -> torch.Tensor:
-        return x if self._running_rms.count() <= 1 else (
-            x * self._running_rms.rms())
+        return x * self._running_rms.rms(self._eps)
 
 
 class MomentsRescaler(Rescaler):
 
-    def __init__(self, size: Union[int, Tuple[int]]) -> None:
+    def __init__(self,
+                 size: Union[int, Tuple[int]],
+                 ddof: int = 0,
+                 eps: float = 1e-8) -> None:
         super().__init__()
         self._size = size
+        self._ddof = ddof
+        self._eps = eps
         self._running_moments = RunningMoments(size)
+
+    @property
+    def size(self) -> Union[int, Tuple[int]]:
+        return self._size
+
+    @property
+    def ddof(self) -> int:
+        return self._ddof
+
+    @property
+    def eps(self) -> float:
+        return self._eps
 
     def reset(self) -> None:
         self._running_moments.reset()
@@ -81,21 +105,40 @@ class MomentsRescaler(Rescaler):
     def update(self, x: torch.Tensor) -> None:
         self._running_moments.update(x)
 
-    def rescale(self, x: torch.Tensor, ddof=0) -> torch.Tensor:
+    def rescale(self, x: torch.Tensor) -> torch.Tensor:
         return x if self._running_moments.count() <= 1 else (
-            x - self._running_moments.mean()) * self._running_moments.rstd(ddof)
+            x - self._running_moments.mean()) * self._running_moments.rstd(
+                self._ddof, self._eps)
 
-    def recover(self, x: torch.Tensor, ddof: int = 0) -> torch.Tensor:
+    def recover(self, x: torch.Tensor) -> torch.Tensor:
         return x if self._running_moments.count() <= 1 else (
-            x * self._running_moments.std(ddof)) + self._running_moments.mean()
+            x * self._running_moments.std(self._ddof, self._eps)
+        ) + self._running_moments.mean()
 
 
 class StdRescaler(Rescaler):
 
-    def __init__(self, size: Union[int, Tuple[int]]) -> None:
+    def __init__(self,
+                 size: Union[int, Tuple[int]],
+                 ddof: int = 0,
+                 eps: float = 1e-8) -> None:
         super().__init__()
         self._size = size
+        self._ddof = ddof
+        self._eps = eps
         self._running_moments = RunningMoments(size)
+
+    @property
+    def size(self) -> Union[int, Tuple[int]]:
+        return self._size
+
+    @property
+    def ddof(self) -> int:
+        return self._ddof
+
+    @property
+    def eps(self) -> float:
+        return self._eps
 
     def reset(self) -> None:
         self._running_moments.reset()
@@ -103,13 +146,13 @@ class StdRescaler(Rescaler):
     def update(self, x: torch.Tensor) -> None:
         self._running_moments.update(x)
 
-    def rescale(self, x: torch.Tensor, ddof=0) -> torch.Tensor:
+    def rescale(self, x: torch.Tensor) -> torch.Tensor:
         return x if self._running_moments.count() <= 1 else (
-            x * self._running_moments.rstd(ddof))
+            x * self._running_moments.rstd(self._ddof, self._eps))
 
-    def recover(self, x: torch.Tensor, ddof: int = 0) -> torch.Tensor:
+    def recover(self, x: torch.Tensor) -> torch.Tensor:
         return x if self._running_moments.count() <= 1 else (
-            x * self._running_moments.std(ddof))
+            x * self._running_moments.std(self._ddof, self._eps))
 
 
 class SqrtRescaler(Rescaler):
