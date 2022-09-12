@@ -60,10 +60,12 @@ class RMSRescaler(Rescaler):
         self._running_rms.update(x)
 
     def rescale(self, x: torch.Tensor) -> torch.Tensor:
-        return x * self._running_rms.rrms()
+        return x if self._running_rms.count() <= 1 else (
+            x * self._running_rms.rrms())
 
     def recover(self, x: torch.Tensor) -> torch.Tensor:
-        return x * self._running_rms.rms()
+        return x if self._running_rms.count() <= 1 else (
+            x * self._running_rms.rms())
 
 
 class MomentsRescaler(Rescaler):
@@ -86,6 +88,28 @@ class MomentsRescaler(Rescaler):
     def recover(self, x: torch.Tensor, ddof: int = 0) -> torch.Tensor:
         return x if self._running_moments.count() <= 1 else (
             x * self._running_moments.std(ddof)) + self._running_moments.mean()
+
+
+class StdRescaler(Rescaler):
+
+    def __init__(self, size: Union[int, Tuple[int]]) -> None:
+        super().__init__()
+        self._size = size
+        self._running_moments = RunningMoments(size)
+
+    def reset(self) -> None:
+        self._running_moments.reset()
+
+    def update(self, x: torch.Tensor) -> None:
+        self._running_moments.update(x)
+
+    def rescale(self, x: torch.Tensor, ddof=0) -> torch.Tensor:
+        return x if self._running_moments.count() <= 1 else (
+            x * self._running_moments.rstd(ddof))
+
+    def recover(self, x: torch.Tensor, ddof: int = 0) -> torch.Tensor:
+        return x if self._running_moments.count() <= 1 else (
+            x * self._running_moments.std(ddof))
 
 
 class SqrtRescaler(Rescaler):
