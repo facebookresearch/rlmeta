@@ -27,6 +27,7 @@ from rlmeta.core.replay_buffer import ReplayBuffer, make_remote_replay_buffer
 from rlmeta.core.server import Server, ServerList
 from rlmeta.samplers import PrioritizedSampler
 from rlmeta.storage import TensorCircularBuffer
+from rlmeta.utils.optimizer_utils import make_optimizer
 
 
 @hydra.main(config_path="./conf", config_name="conf_apex_dqn")
@@ -35,13 +36,15 @@ def main(cfg):
 
     env = atari_wrappers.make_atari(cfg.env)
     train_model = AtariDQNModel(env.action_space.n).to(cfg.train_device)
-    optimizer = torch.optim.Adam(train_model.parameters(), lr=cfg.lr)
+    optimizer = make_optimizer(cfg.optimizer.name, train_model.parameters(),
+                               cfg.optimizer.args)
 
     infer_model = copy.deepcopy(train_model).to(cfg.infer_device)
 
     ctrl = Controller()
-    rb = ReplayBuffer(TensorCircularBuffer(cfg.replay_buffer_size),
-                      PrioritizedSampler(priority_exponent=cfg.alpha))
+    rb = ReplayBuffer(
+        TensorCircularBuffer(cfg.replay_buffer_size),
+        PrioritizedSampler(priority_exponent=cfg.priority_exponent))
 
     m_server = Server(cfg.m_server_name, cfg.m_server_addr)
     r_server = Server(cfg.r_server_name, cfg.r_server_addr)
@@ -70,21 +73,22 @@ def main(cfg):
     e_env_fac = gym_wrappers.AtariWrapperFactory(
         cfg.env, max_episode_steps=cfg.max_episode_steps, clip_rewards=False)
 
-    agent = ApexDQNAgent(a_model,
-                         replay_buffer=a_rb,
-                         controller=a_ctrl,
-                         optimizer=optimizer,
-                         batch_size=cfg.batch_size,
-                         multi_step=cfg.multi_step,
-                         importance_sampling_exponent=cfg.beta,
-                         learning_starts=cfg.get("learning_starts", None),
-                         sync_every_n_steps=cfg.sync_every_n_steps,
-                         push_every_n_steps=cfg.push_every_n_steps)
+    agent = ApexDQNAgent(
+        a_model,
+        replay_buffer=a_rb,
+        controller=a_ctrl,
+        optimizer=optimizer,
+        batch_size=cfg.batch_size,
+        multi_step=cfg.multi_step,
+        importance_sampling_exponent=cfg.importance_sampling_exponent,
+        learning_starts=cfg.get("learning_starts", None),
+        sync_every_n_steps=cfg.sync_every_n_steps,
+        push_every_n_steps=cfg.push_every_n_steps)
     t_agent_fac = ApexDQNAgentFactory(t_model,
                                       FlexibleEpsFunc(cfg.train_eps,
                                                       cfg.num_train_rollouts),
-                                      multi_step=cfg.multi_step,
                                       replay_buffer=t_rb,
+                                      multi_step=cfg.multi_step,
                                       reward_rescaling=False)
     e_agent_fac = ApexDQNAgentFactory(e_model, ConstantEpsFunc(cfg.eval_eps))
 
