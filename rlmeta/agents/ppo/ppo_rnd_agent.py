@@ -40,6 +40,7 @@ class PPORNDAgent(PPOAgent):
         normalize_advantage: bool = True,
         learning_starts: Optional[int] = None,
         batch_size: int = 128,
+        local_batch_size: int = 1024,
         max_grad_norm: float = 1.0,
         push_every_n_steps: int = 1,
         collate_fn: Optional[Callable[[Sequence[NestedTensor]],
@@ -49,7 +50,8 @@ class PPORNDAgent(PPOAgent):
                          optimizer, gamma, gae_lambda, ratio_clipping_eps,
                          value_clipping_eps, vf_loss_coeff, entropy_coeff,
                          rescale_reward, normalize_advantage, learning_starts,
-                         batch_size, max_grad_norm, push_every_n_steps)
+                         batch_size, local_batch_size, max_grad_norm,
+                         push_every_n_steps)
 
         self._intrinsic_advantage_coeff = intrinsic_advantage_coeff
 
@@ -64,7 +66,7 @@ class PPORNDAgent(PPOAgent):
     def act(self, timestep: TimeStep) -> Action:
         obs = timestep.observation
         action, logpi, ext_v, int_v = self._model.act(
-            obs, torch.tensor([self._deterministic_policy]))
+            obs, self._deterministic_policy)
         return Action(action,
                       info={
                           "logpi": logpi,
@@ -75,7 +77,7 @@ class PPORNDAgent(PPOAgent):
     async def async_act(self, timestep: TimeStep) -> Action:
         obs = timestep.observation
         action, logpi, ext_v, int_v = await self._model.async_act(
-            obs, torch.tensor([self._deterministic_policy]))
+            obs, self._deterministic_policy)
         return Action(action,
                       info={
                           "logpi": logpi,
@@ -100,16 +102,28 @@ class PPORNDAgent(PPOAgent):
         next_obs = [
             self._trajectory[i]["obs"] for i in range(1, len(self._trajectory))
         ]
-        next_obs = self._collate_fn(next_obs)
-        int_rewards = self._model.intrinsic_reward(next_obs)
-        int_rewards[-1] = 0.0
+        int_rewards = self._compute_intrinsic_rewards(next_obs,
+                                                      done_at_last=True)
+        return self._make_replay_impl(int_rewards)
+
+    async def _async_make_replay(self) -> List[NestedTensor]:
+        next_obs = [
+            self._trajectory[i]["obs"] for i in range(1, len(self._trajectory))
+        ]
+        int_rewards = await self._async_compute_intrinsic_rewards(
+            next_obs, done_at_last=True)
+        return self._make_replay_impl(int_rewards)
+
+    def _make_replay_impl(
+            self,
+            intrinsic_rewards: Sequence[NestedTensor]) -> List[NestedTensor]:
         self._trajectory.pop()
 
         ext_adv, ext_ret = self._calculate_gae_and_return(
             [x["ext_v"] for x in self._trajectory],
             [x["reward"] for x in self._trajectory], self._ext_reward_rescaler)
         int_adv, int_ret = self._calculate_gae_and_return(
-            [x["int_v"] for x in self._trajectory], torch.unbind(int_rewards),
+            [x["int_v"] for x in self._trajectory], intrinsic_rewards,
             self._int_reward_rescaler)
 
         for cur, ext_a, ext_r, int_a, int_r in zip(self._trajectory, ext_adv,
@@ -122,6 +136,36 @@ class PPORNDAgent(PPOAgent):
             cur.pop("done")
 
         return self._trajectory
+
+    def _compute_intrinsic_rewards(
+            self,
+            obs: Sequence[NestedTensor],
+            done_at_last: bool = True) -> List[torch.Tensor]:
+        int_rewards = []
+        n = len(obs)
+        obs = nested_utils.collate_nested(self._collate_fn, obs)
+        for i in range(0, n, self._local_batch_size):
+            batch = obs[i:i + self._local_batch_size]
+            cur_rewards = self._model.intrinsic_reward(batch)
+            int_rewards.extend(torch.unbind(cur_rewards))
+        if done_at_last:
+            int_rewards[-1].zero_()
+        return int_rewards
+
+    async def _async_compute_intrinsic_rewards(
+            self,
+            obs: Sequence[NestedTensor],
+            done_at_last: bool = True) -> List[torch.Tensor]:
+        int_rewards = []
+        n = len(obs)
+        obs = nested_utils.collate_nested(self._collate_fn, obs)
+        for i in range(0, n, self._local_batch_size):
+            batch = obs[i:i + self._local_batch_size]
+            cur_rewards = await self._model.async_intrinsic_reward(batch)
+            int_rewards.extend(torch.unbind(cur_rewards))
+        if done_at_last:
+            int_rewards[-1].zero_()
+        return int_rewards
 
     def _train_step(self, batch: NestedTensor) -> Dict[str, float]:
         batch = nested_utils.map_nested(lambda x: x.to(self.device()), batch)

@@ -47,12 +47,13 @@ class PPOAgent(Agent):
                  normalize_advantage: bool = True,
                  learning_starts: Optional[int] = None,
                  batch_size: int = 512,
+                 local_batch_size: int = 1024,
                  max_grad_norm: float = 1.0,
                  push_every_n_steps: int = 1) -> None:
         super().__init__()
 
         self._model = model
-        self._deterministic_policy = deterministic_policy
+        self._deterministic_policy = torch.tensor([deterministic_policy])
 
         self._replay_buffer = replay_buffer
         self._controller = controller
@@ -70,6 +71,7 @@ class PPOAgent(Agent):
 
         self._learning_starts = learning_starts
         self._batch_size = batch_size
+        self._local_batch_size = local_batch_size
         self._max_grad_norm = max_grad_norm
         self._push_every_n_steps = push_every_n_steps
 
@@ -82,14 +84,13 @@ class PPOAgent(Agent):
 
     def act(self, timestep: TimeStep) -> Action:
         obs = timestep.observation
-        action, logpi, v = self._model.act(
-            obs, torch.tensor([self._deterministic_policy]))
+        action, logpi, v = self._model.act(obs, self._deterministic_policy)
         return Action(action, info={"logpi": logpi, "v": v})
 
     async def async_act(self, timestep: TimeStep) -> Action:
         obs = timestep.observation
         action, logpi, v = await self._model.async_act(
-            obs, torch.tensor([self._deterministic_policy]))
+            obs, self._deterministic_policy)
         return Action(action, info={"logpi": logpi, "v": v})
 
     async def async_observe_init(self, timestep: TimeStep) -> None:
@@ -116,15 +117,15 @@ class PPOAgent(Agent):
             return
         if self._replay_buffer is not None:
             replay = self._make_replay()
-            self._replay_buffer.extend(replay)
+            self._send_replay(replay)
         self._trajectory.clear()
 
     async def async_update(self) -> None:
         if not self._trajectory or not self._trajectory[-1]["done"]:
             return
         if self._replay_buffer is not None:
-            replay = self._make_replay()
-            await self._replay_buffer.async_extend(replay)
+            replay = await self._async_make_replay()
+            await self._async_send_replay(replay)
         self._trajectory.clear()
 
     def train(self, num_steps: int) -> Optional[StatsDict]:
@@ -186,6 +187,31 @@ class PPOAgent(Agent):
             cur.pop("reward")
             cur.pop("done")
         return self._trajectory
+
+    async def _async_make_replay(self) -> List[NestedTensor]:
+        return self._make_replay()
+
+    def _send_replay(self, replay: List[NestedTensor]) -> None:
+        batch = []
+        while replay:
+            batch.append(replay.pop())
+            if len(batch) >= self._local_batch_size:
+                self._replay_buffer.extend(batch)
+                batch.clear()
+        if batch:
+            self._replay_buffer.extend(batch)
+            batch.clear()
+
+    async def _async_send_replay(self, replay: List[NestedTensor]) -> None:
+        batch = []
+        while replay:
+            batch.append(replay.pop())
+            if len(batch) >= self._local_batch_size:
+                await self._replay_buffer.async_extend(batch)
+                batch.clear()
+        if batch:
+            await self._replay_buffer.async_extend(batch)
+            batch.clear()
 
     def _calculate_gae_and_return(
         self,
