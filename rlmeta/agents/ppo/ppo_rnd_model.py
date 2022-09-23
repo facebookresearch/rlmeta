@@ -46,10 +46,12 @@ class PPORNDModel(RemotableModel):
               deterministic_policy.
 
         Returns:
-            A tuple for pytorch tensor contains [action, logpi, v].
+            A tuple for pytorch tensor contains (action, logpi, ext_v, int_v).
+
             action: The final action selected by the model.
             logpi: The log probility for each action.
-            v: The value of the current state.
+            ext_v: The extrinsic value of the current state.
+            int_v: The intrinsic value of the current state.
         """
 
     @abc.abstractmethod

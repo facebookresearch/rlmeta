@@ -11,7 +11,7 @@ train_device: "cuda:0"
 infer_device: "cuda:1"
 
 env: "PongNoFrameskip-v4"
-max_episode_steps: 2700
+max_episode_steps: 3000
 
 num_train_rollouts: 32
 num_train_workers: 16
