@@ -143,7 +143,7 @@ class PPORNDAgent(PPOAgent):
             done_at_last: bool = True) -> List[torch.Tensor]:
         int_rewards = []
         n = len(obs)
-        obs = self._collate_fn(obs)
+        obs = nested_utils.collate_nested(self._collate_fn, obs)
         for i in range(0, n, self._local_batch_size):
             batch = obs[i:i + self._local_batch_size]
             cur_rewards = self._model.intrinsic_reward(batch)
@@ -158,7 +158,7 @@ class PPORNDAgent(PPOAgent):
             done_at_last: bool = True) -> List[torch.Tensor]:
         int_rewards = []
         n = len(obs)
-        obs = self._collate_fn(obs)
+        obs = nested_utils.collate_nested(self._collate_fn, obs)
         for i in range(0, n, self._local_batch_size):
             batch = obs[i:i + self._local_batch_size]
             cur_rewards = await self._model.async_intrinsic_reward(batch)
