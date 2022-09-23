@@ -44,7 +44,8 @@ class PPOModel(RemotableModel):
               deterministic_policy.
 
         Returns:
-            A tuple for pytorch tensor contains [action, logpi, v].
+            A tuple for pytorch tensor contains (action, logpi, v).
+
             action: The final action selected by the model.
             logpi: The log probility for each action.
             v: The value of the current state.

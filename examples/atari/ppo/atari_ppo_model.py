@@ -48,4 +48,4 @@ class AtariPPOModel(PPOModel):
             action = torch.where(d, greedy_action, sample_action)
             logpi = logpi.gather(dim=-1, index=action)
 
-            return action.cpu(), logpi.cpu(), v.cpu()
+        return action.cpu(), logpi.cpu(), v.cpu()
