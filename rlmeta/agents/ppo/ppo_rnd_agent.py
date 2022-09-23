@@ -29,44 +29,42 @@ class PPORNDAgent(PPOAgent):
         replay_buffer: Optional[ReplayBufferLike] = None,
         controller: Optional[ControllerLike] = None,
         optimizer: Optional[torch.optim.Optimizer] = None,
-        batch_size: int = 128,
-        grad_clip: float = 1.0,
         gamma: float = 0.99,
         gae_lambda: float = 0.95,
-        eps_clip: float = 0.2,
+        ratio_clipping_eps: float = 0.2,
+        value_clipping_eps: Optional[float] = 0.2,
         intrinsic_advantage_coeff: float = 0.5,
         vf_loss_coeff: float = 0.5,
         entropy_coeff: float = 0.01,
-        advantage_normalization: bool = True,
-        reward_rescaling: bool = True,
-        value_clip: bool = True,
+        rescale_reward: bool = True,
+        normalize_advantage: bool = True,
         learning_starts: Optional[int] = None,
+        batch_size: int = 128,
+        max_grad_norm: float = 1.0,
         push_every_n_steps: int = 1,
         collate_fn: Optional[Callable[[Sequence[NestedTensor]],
                                       NestedTensor]] = None
     ) -> None:
         super().__init__(model, deterministic_policy, replay_buffer, controller,
-                         optimizer, batch_size, grad_clip, gamma, gae_lambda,
-                         eps_clip, vf_loss_coeff, entropy_coeff,
-                         advantage_normalization, reward_rescaling, value_clip,
-                         learning_starts, push_every_n_steps)
+                         optimizer, gamma, gae_lambda, ratio_clipping_eps,
+                         value_clipping_eps, vf_loss_coeff, entropy_coeff,
+                         rescale_reward, normalize_advantage, learning_starts,
+                         batch_size, max_grad_norm, push_every_n_steps)
 
-        self.intrinsic_advantage_coeff = intrinsic_advantage_coeff
+        self._intrinsic_advantage_coeff = intrinsic_advantage_coeff
 
-        if self.reward_rescaling:
-            self.reward_rescaler = None
-            self.ext_reward_rescaler = RMSRescaler(size=1)
-            self.int_reward_rescaler = RMSRescaler(size=1)
+        self._reward_rescaler = None
+        self._ext_reward_rescaler = RMSRescaler(
+            size=1) if rescale_reward else None
+        self._int_reward_rescaler = RMSRescaler(
+            size=1) if rescale_reward else None
 
-        if collate_fn is not None:
-            self.collate_fn = collate_fn
-        else:
-            self.collate_fn = data_utils.stack_tensors
+        self._collate_fn = torch.stack if collate_fn is None else collate_fn
 
     def act(self, timestep: TimeStep) -> Action:
         obs = timestep.observation
-        action, logpi, ext_v, int_v = self.model.act(
-            obs, torch.tensor([self.deterministic_policy]))
+        action, logpi, ext_v, int_v = self._model.act(
+            obs, torch.tensor([self._deterministic_policy]))
         return Action(action,
                       info={
                           "logpi": logpi,
@@ -76,8 +74,8 @@ class PPORNDAgent(PPOAgent):
 
     async def async_act(self, timestep: TimeStep) -> Action:
         obs = timestep.observation
-        action, logpi, ext_v, int_v = await self.model.async_act(
-            obs, torch.tensor([self.deterministic_policy]))
+        action, logpi, ext_v, int_v = await self._model.async_act(
+            obs, torch.tensor([self._deterministic_policy]))
         return Action(action,
                       info={
                           "logpi": logpi,
@@ -90,73 +88,72 @@ class PPORNDAgent(PPOAgent):
         act, info = action
         obs, reward, done, _ = next_timestep
 
-        cur = self.trajectory[-1]
+        cur = self._trajectory[-1]
         cur["reward"] = reward
         cur["action"] = act
         cur["logpi"] = info["logpi"]
         cur["ext_v"] = info["ext_v"]
         cur["int_v"] = info["int_v"]
-        cur["next_obs"] = obs
-
-        if not done:
-            self.trajectory.append({"obs": obs})
-        self.done = done
+        self._trajectory.append({"obs": obs, "done": done})
 
     def _make_replay(self) -> List[NestedTensor]:
-        next_obs = [x["next_obs"] for x in self.trajectory]
-        next_obs = self.collate_fn(next_obs)
-        int_rewards = self.model.intrinsic_reward(next_obs)
+        next_obs = [
+            self._trajectory[i]["obs"] for i in range(1, len(self._trajectory))
+        ]
+        next_obs = self._collate_fn(next_obs)
+        int_rewards = self._model.intrinsic_reward(next_obs)
+        int_rewards[-1] = 0.0
+        self._trajectory.pop()
 
         ext_adv, ext_ret = self._calculate_gae_and_return(
-            [x["ext_v"] for x in self.trajectory],
-            [x["reward"] for x in self.trajectory],
-            self.ext_reward_rescaler if self.reward_rescaling else None)
+            [x["ext_v"] for x in self._trajectory],
+            [x["reward"] for x in self._trajectory], self._ext_reward_rescaler)
         int_adv, int_ret = self._calculate_gae_and_return(
-            [x["int_v"] for x in self.trajectory], torch.unbind(int_rewards),
-            self.int_reward_rescaler if self.reward_rescaling else None)
+            [x["int_v"] for x in self._trajectory], torch.unbind(int_rewards),
+            self._int_reward_rescaler)
 
-        for cur, ext_a, ext_r, int_a, int_r in zip(self.trajectory, ext_adv,
+        for cur, ext_a, ext_r, int_a, int_r in zip(self._trajectory, ext_adv,
                                                    ext_ret, int_adv, int_ret):
             cur["ext_gae"] = ext_a
             cur["ext_ret"] = ext_r
             cur["int_gae"] = int_a
             cur["int_ret"] = int_r
             cur.pop("reward")
+            cur.pop("done")
 
-        return self.trajectory
+        return self._trajectory
 
     def _train_step(self, batch: NestedTensor) -> Dict[str, float]:
         batch = nested_utils.map_nested(lambda x: x.to(self.device()), batch)
-        self.optimizer.zero_grad()
+        self._optimizer.zero_grad()
 
         obs = batch["obs"]
         act = batch["action"]
-        old_logpi = batch["logpi"]
         ext_adv = batch["ext_gae"]
         ext_ret = batch["ext_ret"]
         int_adv = batch["int_gae"]
         int_ret = batch["int_ret"]
-        next_obs = batch["next_obs"]
+        behavior_logpi = batch["logpi"]
+        behavior_ext_v = batch["ext_v"]
+        behavior_int_v = batch["int_v"]
+
         logpi, ext_v, int_v = self._model_forward(obs)
-
-        adv = ext_adv + self.intrinsic_advantage_coeff * int_adv
+        adv = ext_adv + self._intrinsic_advantage_coeff * int_adv
         policy_loss, ratio = self._policy_loss(logpi.gather(dim=-1, index=act),
-                                               old_logpi, adv)
+                                               behavior_logpi, adv)
 
-        ext_value_loss = self._value_loss(ext_ret, ext_v,
-                                          batch.get("ext_v", None))
-        int_value_loss = self._value_loss(int_ret, int_v,
-                                          batch.get("int_v", None))
+        ext_value_loss = self._value_loss(ext_ret, ext_v, behavior_ext_v)
+        int_value_loss = self._value_loss(int_ret, int_v, behavior_int_v)
         value_loss = ext_value_loss + int_value_loss
         entropy = self._entropy(logpi)
-        rnd_loss = self._rnd_loss(next_obs)
+        rnd_loss = self._rnd_loss(obs)
 
-        loss = policy_loss + (self.vf_loss_coeff * value_loss) - (
-            self.entropy_coeff * entropy) + rnd_loss
+        loss = policy_loss + (self._vf_loss_coeff * value_loss) - (
+            self._entropy_coeff * entropy) + rnd_loss
         loss.backward()
-        grad_norm = nn.utils.clip_grad_norm_(self.model.parameters(),
-                                             self.grad_clip)
-        self.optimizer.step()
+        grad_norm = nn.utils.clip_grad_norm_(self._model.parameters(),
+                                             self._max_grad_norm)
+        self._optimizer.step()
 
         return {
             "ext_return": ext_ret.detach().mean().item(),
@@ -173,4 +170,4 @@ class PPORNDAgent(PPOAgent):
         }
 
     def _rnd_loss(self, next_obs: torch.Tensor) -> torch.Tensor:
-        return self.model.rnd_loss(next_obs)
+        return self._model.rnd_loss(next_obs)
