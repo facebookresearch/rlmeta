@@ -84,8 +84,6 @@ def main(cfg):
         target_sync_period=cfg.target_sync_period,
         learning_starts=cfg.get("learning_starts", None),
         model_push_period=cfg.model_push_period)
-        # sync_every_n_steps=cfg.sync_every_n_steps,
-        # push_every_n_steps=cfg.push_every_n_steps)
     t_agent_fac = ApexDQNAgentFactory(t_model,
                                       FlexibleEpsFunc(cfg.train_eps,
                                                       cfg.num_train_rollouts),

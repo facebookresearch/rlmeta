@@ -39,9 +39,6 @@ optimizer:
   args:
     lr: 3e-4
 
-# sync_every_n_steps: 2500
-# push_every_n_steps: 10
-
 num_epochs: 1000
 steps_per_epoch: 3000
 
