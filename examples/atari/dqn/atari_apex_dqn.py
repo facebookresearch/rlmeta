@@ -79,17 +79,19 @@ def main(cfg):
         controller=a_ctrl,
         optimizer=optimizer,
         batch_size=cfg.batch_size,
-        multi_step=cfg.multi_step,
+        n_step=cfg.n_step,
         importance_sampling_exponent=cfg.importance_sampling_exponent,
+        target_sync_period=cfg.target_sync_period,
         learning_starts=cfg.get("learning_starts", None),
-        sync_every_n_steps=cfg.sync_every_n_steps,
-        push_every_n_steps=cfg.push_every_n_steps)
+        model_push_period=cfg.model_push_period)
+        # sync_every_n_steps=cfg.sync_every_n_steps,
+        # push_every_n_steps=cfg.push_every_n_steps)
     t_agent_fac = ApexDQNAgentFactory(t_model,
                                       FlexibleEpsFunc(cfg.train_eps,
                                                       cfg.num_train_rollouts),
                                       replay_buffer=t_rb,
-                                      multi_step=cfg.multi_step,
-                                      reward_rescaling=False)
+                                      n_step=cfg.n_step,
+                                      rescale_reward=False)
     e_agent_fac = ApexDQNAgentFactory(e_model, ConstantEpsFunc(cfg.eval_eps))
 
     t_loop = ParallelLoop(t_env_fac,

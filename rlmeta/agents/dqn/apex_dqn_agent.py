@@ -14,7 +14,6 @@ import torch.nn.functional as F
 from rich.console import Console
 from rich.progress import track
 
-import rlmeta.utils.data_utils as data_utils
 import rlmeta.utils.nested_utils as nested_utils
 
 from rlmeta.agents.agent import Agent, AgentFactory
@@ -39,127 +38,99 @@ class ApexDQNAgent(Agent):
         controller: Optional[ControllerLike] = None,
         optimizer: Optional[torch.optim.Optimizer] = None,
         batch_size: int = 512,
-        local_batch_size: int = 1024,
-        grad_clip: float = 50.0,
-        multi_step: int = 1,
+        max_grad_norm: float = 40.0,
+        n_step: int = 1,
         gamma: float = 0.99,
         importance_sampling_exponent: float = 0.4,
-        reward_rescaling: bool = True,
+        target_sync_period: int = 2500,
+        rescale_reward: bool = True,
         learning_starts: Optional[int] = None,
-        sync_every_n_steps: int = 2500,
-        push_every_n_steps: int = 10,
+        model_push_period: int = 10,
+        local_batch_size: int = 1024,
         collate_fn: Optional[Callable[[Sequence[NestedTensor]],
                                       NestedTensor]] = None,
         additional_models_to_update: Optional[List[ModelLike]] = None,
     ) -> None:
         super().__init__()
 
-        self.model = model
-        self.eps = eps
+        self._model = model
+        self._eps = torch.tensor([eps])
 
-        self.replay_buffer = replay_buffer
-        self.controller = controller
+        self._replay_buffer = replay_buffer
+        self._controller = controller
 
-        self.optimizer = optimizer
-        self.batch_size = batch_size
-        self.local_batch_size = local_batch_size
-        self.grad_clip = grad_clip
+        self._optimizer = optimizer
+        self._batch_size = batch_size
+        self._max_grad_norm = max_grad_norm
 
-        self.multi_step = multi_step
-        self.gamma = gamma
-        self.importance_sampling_exponent = importance_sampling_exponent
-        self.reward_rescaling = reward_rescaling
-        self.reward_rescaler = SqrtRescaler() if reward_rescaling else None
-        self.learning_starts = learning_starts
+        self._n_step = n_step
+        self._gamma = gamma
+        self._gamma_pow = tuple(gamma**i for i in range(n_step + 1))
+        self._importance_sampling_exponent = importance_sampling_exponent
+        self._target_sync_period = target_sync_period
+        self._rescale_reward = rescale_reward
+        self._reward_rescaler = SqrtRescaler() if rescale_reward else None
+
+        self._learning_starts = learning_starts
+        self._model_push_period = model_push_period
+
+        self._local_batch_size = local_batch_size
+        self._collate_fn = torch.stack if collate_fn is None else collate_fn
 
         self._additional_models_to_update = additional_models_to_update
-        self.sync_every_n_steps = sync_every_n_steps
-        self.push_every_n_steps = push_every_n_steps
 
-        if collate_fn is not None:
-            self.collate_fn = collate_fn
-        else:
-            self.collate_fn = data_utils.stack_tensors
-
-        self.trajectory = []
-        self.step_counter = 0
-
-        self.training_variables = {}
+        self._step_counter = 0
+        self._trajectory = []
+        self._update_priorities_future = None
 
     def reset(self) -> None:
-        self.step_counter = 0
+        self._step_counter = 0
 
     def act(self, timestep: TimeStep) -> Action:
         obs = timestep.observation
-        action, v = self.model.act(obs, torch.tensor([self.eps]))
+        action, v = self._model.act(obs, self._eps)
         return Action(action, info={"v": v})
 
     async def async_act(self, timestep: TimeStep) -> Action:
         obs = timestep.observation
-        action, v = await self.model.async_act(obs, torch.tensor([self.eps]))
+        action, v = await self._model.async_act(obs, self._eps)
         return Action(action, info={"v": v})
 
     async def async_observe_init(self, timestep: TimeStep) -> None:
-        if self.replay_buffer is None:
+        if self._replay_buffer is None:
             return
+
         obs, _, done, _ = timestep
-        self.trajectory = [{"obs": obs, "done": done}]
+        if done:
+            self._trajectory.clear()
+        else:
+            self._trajectory = [{"obs": obs, "done": done}]
 
     async def async_observe(self, action: Action,
                             next_timestep: TimeStep) -> None:
-        if self.replay_buffer is None:
+        if self._replay_buffer is None:
             return
         act, info = action
         obs, reward, done, _ = next_timestep
-        cur = self.trajectory[-1]
+        cur = self._trajectory[-1]
         cur["reward"] = reward
         cur["action"] = act
         cur["v"] = info["v"]
-        self.trajectory.append({"obs": obs, "done": done})
+        self._trajectory.append({"obs": obs, "done": done})
 
     def update(self) -> None:
-        if self.replay_buffer is None or not self.trajectory[-1]["done"]:
+        if self._replay_buffer is None or not self._trajectory[-1]["done"]:
             return
-
         replay = self._make_replay()
-        batch = []
-        for data in replay:
-            batch.append(data)
-            if len(batch) >= self.local_batch_size:
-                b = nested_utils.collate_nested(self.collate_fn, batch)
-                priorities = self.model.compute_priority(
-                    b["obs"], b["action"], b["target"])
-                self.replay_buffer.extend(batch, priorities)
-                batch.clear()
-        if len(batch) > 0:
-            b = nested_utils.collate_nested(self.collate_fn, batch)
-            priorities = self.model.compute_priority(b["obs"], b["action"],
-                                                     b["target"])
-            self.replay_buffer.extend(batch, priorities)
-            batch.clear()
-        self.trajectory.clear()
+        self._send_replay(replay)
+        self._trajectory.clear()
 
     async def async_update(self) -> None:
-        if self.replay_buffer is None or not self.trajectory[-1]["done"]:
+        if self._replay_buffer is None or not self._trajectory[-1]["done"]:
             return
-
         replay = self._make_replay()
-        batch = []
-        for data in replay:
-            batch.append(data)
-            if len(batch) >= self.local_batch_size:
-                b = nested_utils.collate_nested(self.collate_fn, batch)
-                priorities = await self.model.async_compute_priority(
-                    b["obs"], b["action"], b["target"])
-                await self.replay_buffer.async_extend(batch, priorities)
-                batch.clear()
-        if len(batch) > 0:
-            b = nested_utils.collate_nested(self.collate_fn, batch)
-            priorities = await self.model.async_compute_priority(
-                b["obs"], b["action"], b["target"])
-            await self.replay_buffer.async_extend(batch, priorities)
-            batch.clear()
-        self.trajectory.clear()
+        await self._async_send_replay(replay)
+        self._trajectory.clear()
 
     def connect(self) -> None:
         super().connect()
@@ -168,16 +139,16 @@ class ApexDQNAgent(Agent):
                 m.connect()
 
     def train(self, num_steps: int) -> Optional[StatsDict]:
-        self.controller.set_phase(Phase.TRAIN)
+        self._controller.set_phase(Phase.TRAIN)
 
-        self.replay_buffer.warm_up(self.learning_starts)
+        self._replay_buffer.warm_up(self._learning_starts)
         stats = StatsDict()
 
         console.log(f"Training for num_steps = {num_steps}")
         for _ in track(range(num_steps), description="Training..."):
             t0 = time.perf_counter()
-            keys, batch, probabilities = self.replay_buffer.sample(
-                self.batch_size)
+            keys, batch, probabilities = self._replay_buffer.sample(
+                self._batch_size)
             t1 = time.perf_counter()
             step_stats = self._train_step(keys, batch, probabilities)
             t2 = time.perf_counter()
@@ -188,22 +159,22 @@ class ApexDQNAgent(Agent):
             stats.extend(step_stats)
             stats.extend(time_stats)
 
-            self.step_counter += 1
-            if self.step_counter % self.sync_every_n_steps == 0:
-                self.model.sync_target_net()
+            self._step_counter += 1
+            if self._step_counter % self._target_sync_period == 0:
+                self._model.sync_target_net()
                 if self._additional_models_to_update is not None:
                     for m in self._additional_models_to_update:
                         m.sync_target_net()
 
-            if self.step_counter % self.push_every_n_steps == 0:
-                self.model.push()
+            if self._step_counter % self._model_push_period == 0:
+                self._model.push()
                 if self._additional_models_to_update is not None:
                     for m in self._additional_models_to_update:
                         m.push()
 
-        episode_stats = self.controller.stats(Phase.TRAIN)
+        episode_stats = self._controller.stats(Phase.TRAIN)
         stats.update(episode_stats)
-        self.controller.reset_phase(Phase.TRAIN)
+        self._controller.reset_phase(Phase.TRAIN)
 
         return stats
 
@@ -211,72 +182,109 @@ class ApexDQNAgent(Agent):
              num_episodes: Optional[int] = None,
              keep_training_loops: bool = False) -> Optional[StatsDict]:
         if keep_training_loops:
-            self.controller.set_phase(Phase.BOTH)
+            self._controller.set_phase(Phase.BOTH)
         else:
-            self.controller.set_phase(Phase.EVAL)
-        self.controller.reset_phase(Phase.EVAL, limit=num_episodes)
-        while self.controller.count(Phase.EVAL) < num_episodes:
+            self._controller.set_phase(Phase.EVAL)
+        self._controller.reset_phase(Phase.EVAL, limit=num_episodes)
+        while self._controller.count(Phase.EVAL) < num_episodes:
             time.sleep(1)
-        stats = self.controller.stats(Phase.EVAL)
+        stats = self._controller.stats(Phase.EVAL)
         return stats
 
     def _make_replay(self) -> Optional[List[NestedTensor]]:
-        trajectory_len = len(self.trajectory)
+        trajectory_len = len(self._trajectory)
         if trajectory_len < 2:
             return None
 
         replay = []
         for i in range(0, trajectory_len - 1):
-            k = min(self.multi_step, trajectory_len - 1 - i)
-            cur = self.trajectory[i]
-            nxt = self.trajectory[i + k]
+            k = min(self._n_step, trajectory_len - 1 - i)
+            cur = self._trajectory[i]
+            nxt = self._trajectory[i + k]
             obs = cur["obs"]
             act = cur["action"]
             v = torch.zeros(1) if nxt["done"] else nxt["v"]
-            if self.reward_rescaler is not None:
-                v = self.reward_rescaler.recover(v)
-            target = (self.gamma**k) * v
+            if self._reward_rescaler is not None:
+                v = self._reward_rescaler.recover(v)
+            target = self._gamma_pow[k] * v
             for j in range(k):
-                target += (self.gamma**j) * self.trajectory[i + j]["reward"]
-            if self.reward_rescaler is not None:
-                target = self.reward_rescaler.rescale(target)
+                target += self._gamma_pow[j] * self._trajectory[i + j]["reward"]
+            if self._reward_rescaler is not None:
+                target = self._reward_rescaler.rescale(target)
             replay.append({"obs": obs, "action": act, "target": target})
 
         return replay
 
+    def _send_replay(self, replay: List[NestedTensor]) -> None:
+        batch = []
+        while replay:
+            batch.append(replay.pop())
+            if len(batch) >= self._local_batch_size:
+                b = nested_utils.collate_nested(self._collate_fn, batch)
+                priorities = self._model.compute_priority(
+                    b["obs"], b["action"], b["target"])
+                self._replay_buffer.extend(batch, priorities)
+                batch.clear()
+        if batch:
+            b = nested_utils.collate_nested(self._collate_fn, batch)
+            priorities = self._model.compute_priority(b["obs"], b["action"],
+                                                      b["target"])
+            self._replay_buffer.extend(batch, priorities)
+            batch.clear()
+
+    async def _async_send_replay(self, replay: List[NestedTensor]) -> None:
+        batch = []
+        while replay:
+            batch.append(replay.pop())
+            if len(batch) >= self._local_batch_size:
+                b = nested_utils.collate_nested(self._collate_fn, batch)
+                priorities = await self._model.async_compute_priority(
+                    b["obs"], b["action"], b["target"])
+                await self._replay_buffer.async_extend(batch, priorities)
+                batch.clear()
+        if batch:
+            b = nested_utils.collate_nested(self._collate_fn, batch)
+            priorities = await self._model.async_compute_priority(
+                b["obs"], b["action"], b["target"])
+            await self._replay_buffer.async_extend(batch, priorities)
+            batch.clear()
+
     def _train_step(self, keys: torch.Tensor, batch: NestedTensor,
                     probabilities: torch.Tensor) -> Dict[str, float]:
-        device = next(self.model.parameters()).device
+        device = next(self._model.parameters()).device
         batch = nested_utils.map_nested(lambda x: x.to(device), batch)
-        self.optimizer.zero_grad()
+        self._optimizer.zero_grad()
 
         obs = batch["obs"]
         action = batch["action"]
         target = batch["target"]
 
-        q = self.model.q(obs, action)
+        q = self._model.q(obs, action)
         probabilities = probabilities.to(dtype=q.dtype, device=device)
-        weight = probabilities.pow(-self.importance_sampling_exponent)
+        weight = probabilities.pow(-self._importance_sampling_exponent)
         weight.div_(weight.max())
 
-        loss = F.huber_loss(q, target, reduction="none").squeeze(-1)
+        # loss = F.huber_loss(q, target, reduction="none").squeeze(-1)
+        loss = F.mse_loss(q, target, reduction="none").squeeze(-1)
         loss = (loss * weight).mean()
         loss.backward()
-        grad_norm = torch.nn.utils.clip_grad_norm_(self.model.parameters(),
-                                                   self.grad_clip)
-        self.optimizer.step()
+        grad_norm = torch.nn.utils.clip_grad_norm_(self._model.parameters(),
+                                                   self._max_grad_norm)
+        self._optimizer.step()
 
+        with torch.no_grad():
+            q = self._model.q(obs, action)
         td_err = (target - q).squeeze(-1)
         priorities = td_err.detach().abs().cpu()
 
         # Wait for previous update request
-        if "update_fut" in self.training_variables:
-            self.training_variables["update_fut"].wait()
+        if self._update_priorities_future is not None:
+            self._update_priorities_future.wait()
 
         # Async update to start next training step when waiting for updating
         # priorities.
-        update_fut = self.replay_buffer.async_update(keys, priorities)
-        self.training_variables["update_fut"] = update_fut
+        self._update_priorities_future = self._replay_buffer.async_update(
+            keys, priorities)
 
         return {
             "td_err": td_err.detach().mean().item(),
@@ -295,15 +303,15 @@ class ApexDQNAgentFactory(AgentFactory):
         controller: Optional[ControllerLike] = None,
         optimizer: Optional[torch.optim.Optimizer] = None,
         batch_size: int = 512,
-        local_batch_size: int = 1024,
-        grad_clip: float = 40.0,
-        multi_step: int = 1,
+        max_grad_norm: float = 40.0,
+        n_step: int = 1,
         gamma: float = 0.99,
         importance_sampling_exponent: float = 0.4,
-        reward_rescaling: bool = True,
+        target_sync_period: int = 2500,
+        rescale_reward: bool = True,
         learning_starts: Optional[int] = None,
-        sync_every_n_steps: int = 2500,
-        push_every_n_steps: int = 10,
+        model_push_period: int = 10,
+        local_batch_size: int = 1024,
         collate_fn: Optional[Callable[[Sequence[NestedTensor]],
                                       NestedTensor]] = None,
         additional_models_to_update: Optional[List[ModelLike]] = None,
@@ -314,15 +322,15 @@ class ApexDQNAgentFactory(AgentFactory):
         self._controller = controller
         self._optimizer = optimizer
         self._batch_size = batch_size
-        self._local_batch_size = local_batch_size
-        self._grad_clip = grad_clip
-        self._multi_step = multi_step
+        self._max_grad_norm = max_grad_norm
+        self._n_step = n_step
         self._gamma = gamma
         self._importance_sampling_exponent = importance_sampling_exponent
-        self._reward_rescaling = reward_rescaling
+        self._target_sync_period = target_sync_period
+        self._rescale_reward = rescale_reward
         self._learning_starts = learning_starts
-        self._sync_every_n_steps = sync_every_n_steps
-        self._push_every_n_steps = push_every_n_steps
+        self._model_push_period = model_push_period
+        self._local_batch_size = local_batch_size
         self._collate_fn = collate_fn
         self._additional_models_to_update = additional_models_to_update
 
@@ -338,15 +346,15 @@ class ApexDQNAgentFactory(AgentFactory):
             controller,
             self._optimizer,
             self._batch_size,
-            self._local_batch_size,
-            self._grad_clip,
-            self._multi_step,
+            self._max_grad_norm,
+            self._n_step,
             self._gamma,
             self._importance_sampling_exponent,
-            self._reward_rescaling,
+            self._target_sync_period,
+            self._rescale_reward,
             self._learning_starts,
-            self._sync_every_n_steps,
-            self._push_every_n_steps,
+            self._model_push_period,
+            self._local_batch_size,
             self._collate_fn,
             additional_models_to_update=self._additional_models_to_update)
 

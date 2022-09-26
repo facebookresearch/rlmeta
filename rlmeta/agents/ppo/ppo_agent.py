@@ -37,6 +37,8 @@ class PPOAgent(Agent):
                  replay_buffer: Optional[ReplayBufferLike] = None,
                  controller: Optional[ControllerLike] = None,
                  optimizer: Optional[torch.optim.Optimizer] = None,
+                 batch_size: int = 512,
+                 max_grad_norm: float = 1.0,
                  gamma: float = 0.99,
                  gae_lambda: float = 0.95,
                  ratio_clipping_eps: float = 0.2,
@@ -46,10 +48,8 @@ class PPOAgent(Agent):
                  rescale_reward: bool = True,
                  normalize_advantage: bool = True,
                  learning_starts: Optional[int] = None,
-                 batch_size: int = 512,
-                 local_batch_size: int = 1024,
-                 max_grad_norm: float = 1.0,
-                 push_every_n_steps: int = 1) -> None:
+                 model_push_period: int = 10,
+                 local_batch_size: int = 1024) -> None:
         super().__init__()
 
         self._model = model
@@ -57,7 +57,10 @@ class PPOAgent(Agent):
 
         self._replay_buffer = replay_buffer
         self._controller = controller
+
         self._optimizer = optimizer
+        self._batch_size = batch_size
+        self._max_grad_norm = max_grad_norm
 
         self._gamma = gamma
         self._gae_lambda = gae_lambda
@@ -70,10 +73,8 @@ class PPOAgent(Agent):
         self._normalize_advantage = normalize_advantage
 
         self._learning_starts = learning_starts
-        self._batch_size = batch_size
+        self._model_push_period = model_push_period
         self._local_batch_size = local_batch_size
-        self._max_grad_norm = max_grad_norm
-        self._push_every_n_steps = push_every_n_steps
 
         self._trajectory = []
         self._step_counter = 0
@@ -94,14 +95,20 @@ class PPOAgent(Agent):
         return Action(action, info={"logpi": logpi, "v": v})
 
     async def async_observe_init(self, timestep: TimeStep) -> None:
+        if self._replay_buffer is None:
+            return
+
         obs, _, done, _ = timestep
         if done:
-            self._trajectory = []
+            self._trajectory.clear()
         else:
             self._trajectory = [{"obs": obs, "done": done}]
 
     async def async_observe(self, action: Action,
                             next_timestep: TimeStep) -> None:
+        if self._replay_buffer is None:
+            return
+
         act, info = action
         obs, reward, done, _ = next_timestep
 
@@ -149,7 +156,7 @@ class PPOAgent(Agent):
             stats.extend(time_stats)
 
             self._step_counter += 1
-            if self._step_counter % self._push_every_n_steps == 0:
+            if self._step_counter % self._model_push_period == 0:
                 self._model.push()
 
         episode_stats = self._controller.stats(Phase.TRAIN)
