@@ -29,6 +29,8 @@ class PPORNDAgent(PPOAgent):
         replay_buffer: Optional[ReplayBufferLike] = None,
         controller: Optional[ControllerLike] = None,
         optimizer: Optional[torch.optim.Optimizer] = None,
+        batch_size: int = 128,
+        max_grad_norm: float = 1.0,
         gamma: float = 0.99,
         gae_lambda: float = 0.95,
         ratio_clipping_eps: float = 0.2,
@@ -39,19 +41,17 @@ class PPORNDAgent(PPOAgent):
         rescale_reward: bool = True,
         normalize_advantage: bool = True,
         learning_starts: Optional[int] = None,
-        batch_size: int = 128,
+        model_push_period: int = 10,
         local_batch_size: int = 1024,
-        max_grad_norm: float = 1.0,
-        push_every_n_steps: int = 1,
         collate_fn: Optional[Callable[[Sequence[NestedTensor]],
                                       NestedTensor]] = None
     ) -> None:
         super().__init__(model, deterministic_policy, replay_buffer, controller,
-                         optimizer, gamma, gae_lambda, ratio_clipping_eps,
-                         value_clipping_eps, vf_loss_coeff, entropy_coeff,
-                         rescale_reward, normalize_advantage, learning_starts,
-                         batch_size, local_batch_size, max_grad_norm,
-                         push_every_n_steps)
+                         optimizer, batch_size, max_grad_norm, gamma,
+                         gae_lambda, ratio_clipping_eps, value_clipping_eps,
+                         vf_loss_coeff, entropy_coeff, rescale_reward,
+                         normalize_advantage, learning_starts,
+                         model_push_period, local_batch_size)
 
         self._intrinsic_advantage_coeff = intrinsic_advantage_coeff
 
@@ -87,6 +87,9 @@ class PPORNDAgent(PPOAgent):
 
     async def async_observe(self, action: Action,
                             next_timestep: TimeStep) -> None:
+        if self._replay_buffer is None:
+            return
+
         act, info = action
         obs, reward, done, _ = next_timestep
 
@@ -145,7 +148,8 @@ class PPORNDAgent(PPOAgent):
         n = len(obs)
         obs = nested_utils.collate_nested(self._collate_fn, obs)
         for i in range(0, n, self._local_batch_size):
-            batch = obs[i:i + self._local_batch_size]
+            batch = nested_utils.map_nested(
+                lambda x, i=i: x[i:i + self._local_batch_size], obs)
             cur_rewards = self._model.intrinsic_reward(batch)
             int_rewards.extend(torch.unbind(cur_rewards))
         if done_at_last:
@@ -160,7 +164,8 @@ class PPORNDAgent(PPOAgent):
         n = len(obs)
         obs = nested_utils.collate_nested(self._collate_fn, obs)
         for i in range(0, n, self._local_batch_size):
-            batch = obs[i:i + self._local_batch_size]
+            batch = nested_utils.map_nested(
+                lambda x, i=i: x[i:i + self._local_batch_size], obs)
             cur_rewards = await self._model.async_intrinsic_reward(batch)
             int_rewards.extend(torch.unbind(cur_rewards))
         if done_at_last:
