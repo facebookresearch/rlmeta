@@ -274,10 +274,6 @@ class ApexDQNAgent(Agent):
         weight = probabilities.pow(-self._importance_sampling_exponent)
         weight.div_(weight.max())
 
-        # loss = F.huber_loss(q, target, reduction="none").squeeze(-1)
-        # loss = F.mse_loss(q, target, reduction="none").squeeze(-1)
-        # loss = (loss * weight).mean()
-
         loss = self._loss(target, q, behavior_q, weight)
         loss.backward()
         grad_norm = torch.nn.utils.clip_grad_norm_(self._model.parameters(),
