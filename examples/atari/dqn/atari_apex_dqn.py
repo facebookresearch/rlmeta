@@ -69,9 +69,9 @@ def main(cfg):
     t_rb = make_remote_replay_buffer(rb, r_server)
 
     t_env_fac = gym_wrappers.AtariWrapperFactory(
-        cfg.env, max_episode_steps=cfg.max_episode_steps, clip_rewards=True)
+        cfg.env, max_episode_steps=cfg.max_episode_steps)
     e_env_fac = gym_wrappers.AtariWrapperFactory(
-        cfg.env, max_episode_steps=cfg.max_episode_steps, clip_rewards=False)
+        cfg.env, max_episode_steps=cfg.max_episode_steps)
 
     agent = ApexDQNAgent(
         a_model,
@@ -81,6 +81,7 @@ def main(cfg):
         batch_size=cfg.batch_size,
         n_step=cfg.n_step,
         importance_sampling_exponent=cfg.importance_sampling_exponent,
+        max_abs_reward=cfg.max_abs_reward,
         target_sync_period=cfg.target_sync_period,
         learning_starts=cfg.get("learning_starts", None),
         model_push_period=cfg.model_push_period)
@@ -89,6 +90,7 @@ def main(cfg):
                                                       cfg.num_train_rollouts),
                                       replay_buffer=t_rb,
                                       n_step=cfg.n_step,
+                                      max_abs_reward=cfg.max_abs_reward,
                                       rescale_reward=False)
     e_agent_fac = ApexDQNAgentFactory(e_model, ConstantEpsFunc(cfg.eval_eps))
 

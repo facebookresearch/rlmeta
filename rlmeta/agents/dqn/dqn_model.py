@@ -43,7 +43,7 @@ class DQNModel(RemotableModel):
 
     @abc.abstractmethod
     def act(self, obs: NestedTensor, eps: torch.Tensor, *args,
-            **kwargs) -> Tuple[torch.Tensor, torch.Tensor]:
+            **kwargs) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Act function will be called remotely by the agent.
         This function should upload the input to the device and download the
@@ -55,6 +55,7 @@ class DQNModel(RemotableModel):
 
         Returns:
             action: The final action selected by the model.
+            q: The Q(s, a) value of the current state and action.
             v: The value estimation of current state by max(Q(s, a)).
         """
 
