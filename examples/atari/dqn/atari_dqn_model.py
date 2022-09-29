@@ -80,8 +80,9 @@ class AtariDQNModel(DQNModel):
             pi.scatter_(dim=-1, index=greedy_action, src=1.0 - eps)
             action = pi.multinomial(1, replacement=True)
             v = self._value(x, q)
+            q = q.gather(dim=-1, index=action)
 
-            return action.cpu(), v.cpu()
+        return action.cpu(), q.cpu(), v.cpu()
 
     def td_error(self, obs: NestedTensor, action: torch.Tensor,
                  target: torch.Tensor) -> torch.Tensor:

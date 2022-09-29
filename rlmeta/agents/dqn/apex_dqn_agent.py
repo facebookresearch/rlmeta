@@ -42,6 +42,7 @@ class ApexDQNAgent(Agent):
         n_step: int = 1,
         gamma: float = 0.99,
         importance_sampling_exponent: float = 0.4,
+        max_abs_reward: Optional[int] = None,
         target_sync_period: int = 2500,
         rescale_reward: bool = True,
         learning_starts: Optional[int] = None,
@@ -67,6 +68,8 @@ class ApexDQNAgent(Agent):
         self._gamma = gamma
         self._gamma_pow = tuple(gamma**i for i in range(n_step + 1))
         self._importance_sampling_exponent = importance_sampling_exponent
+        self._max_abs_reward = max_abs_reward
+
         self._target_sync_period = target_sync_period
         self._rescale_reward = rescale_reward
         self._reward_rescaler = SqrtRescaler() if rescale_reward else None
@@ -88,13 +91,13 @@ class ApexDQNAgent(Agent):
 
     def act(self, timestep: TimeStep) -> Action:
         obs = timestep.observation
-        action, v = self._model.act(obs, self._eps)
-        return Action(action, info={"v": v})
+        action, q, v = self._model.act(obs, self._eps)
+        return Action(action, info={"q": q, "v": v})
 
     async def async_act(self, timestep: TimeStep) -> Action:
         obs = timestep.observation
-        action, v = await self._model.async_act(obs, self._eps)
-        return Action(action, info={"v": v})
+        action, q, v = await self._model.async_act(obs, self._eps)
+        return Action(action, info={"q": q, "v": v})
 
     async def async_observe_init(self, timestep: TimeStep) -> None:
         if self._replay_buffer is None:
@@ -112,9 +115,14 @@ class ApexDQNAgent(Agent):
             return
         act, info = action
         obs, reward, done, _ = next_timestep
+        reward = torch.tensor([reward])
+        if self._max_abs_reward is not None:
+            reward = reward.clamp(-self._max_abs_reward, self._max_abs_reward)
+
         cur = self._trajectory[-1]
-        cur["reward"] = reward
+        cur["reward"] = torch.tensor([reward])
         cur["action"] = act
+        cur["q"] = info["q"]
         cur["v"] = info["v"]
         self._trajectory.append({"obs": obs, "done": done})
 
@@ -203,6 +211,7 @@ class ApexDQNAgent(Agent):
             nxt = self._trajectory[i + k]
             obs = cur["obs"]
             act = cur["action"]
+            q = cur["q"]
             v = torch.zeros(1) if nxt["done"] else nxt["v"]
             if self._reward_rescaler is not None:
                 v = self._reward_rescaler.recover(v)
@@ -211,7 +220,7 @@ class ApexDQNAgent(Agent):
                 target += self._gamma_pow[j] * self._trajectory[i + j]["reward"]
             if self._reward_rescaler is not None:
                 target = self._reward_rescaler.rescale(target)
-            replay.append({"obs": obs, "action": act, "target": target})
+            replay.append({"obs": obs, "action": act, "q": q, "target": target})
 
         return replay
 
@@ -257,6 +266,7 @@ class ApexDQNAgent(Agent):
 
         obs = batch["obs"]
         action = batch["action"]
+        behavior_q = batch["q"]
         target = batch["target"]
 
         q = self._model.q(obs, action)
@@ -265,8 +275,10 @@ class ApexDQNAgent(Agent):
         weight.div_(weight.max())
 
         # loss = F.huber_loss(q, target, reduction="none").squeeze(-1)
-        loss = F.mse_loss(q, target, reduction="none").squeeze(-1)
-        loss = (loss * weight).mean()
+        # loss = F.mse_loss(q, target, reduction="none").squeeze(-1)
+        # loss = (loss * weight).mean()
+
+        loss = self._loss(target, q, behavior_q, weight)
         loss.backward()
         grad_norm = torch.nn.utils.clip_grad_norm_(self._model.parameters(),
                                                    self._max_grad_norm)
@@ -292,6 +304,14 @@ class ApexDQNAgent(Agent):
             "grad_norm": grad_norm.detach().mean().item(),
         }
 
+    def _loss(self,
+              target: torch.Tensor,
+              q: torch.Tensor,
+              behavior_q: Optional[torch.Tensor] = None,
+              weight: Optional[torch.Tensor] = None) -> torch.Tensor:
+        return F.mse_loss(q, target) if weight is None else (
+            F.mse_loss(q, target, reduction="none") * weight).mean()
+
 
 class ApexDQNAgentFactory(AgentFactory):
 
@@ -307,6 +327,7 @@ class ApexDQNAgentFactory(AgentFactory):
         n_step: int = 1,
         gamma: float = 0.99,
         importance_sampling_exponent: float = 0.4,
+        max_abs_reward: Optional[int] = None,
         target_sync_period: int = 2500,
         rescale_reward: bool = True,
         learning_starts: Optional[int] = None,
@@ -326,6 +347,7 @@ class ApexDQNAgentFactory(AgentFactory):
         self._n_step = n_step
         self._gamma = gamma
         self._importance_sampling_exponent = importance_sampling_exponent
+        self._max_abs_reward = max_abs_reward
         self._target_sync_period = target_sync_period
         self._rescale_reward = rescale_reward
         self._learning_starts = learning_starts
@@ -350,6 +372,7 @@ class ApexDQNAgentFactory(AgentFactory):
             self._n_step,
             self._gamma,
             self._importance_sampling_exponent,
+            self._max_abs_reward,
             self._target_sync_period,
             self._rescale_reward,
             self._learning_starts,
