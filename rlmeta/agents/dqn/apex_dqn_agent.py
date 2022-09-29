@@ -266,7 +266,6 @@ class ApexDQNAgent(Agent):
 
         obs = batch["obs"]
         action = batch["action"]
-        behavior_q = batch["q"]
         target = batch["target"]
 
         q = self._model.q(obs, action)
@@ -274,7 +273,7 @@ class ApexDQNAgent(Agent):
         weight = probabilities.pow(-self._importance_sampling_exponent)
         weight.div_(weight.max())
 
-        loss = self._loss(target, q, behavior_q, weight)
+        loss = self._loss(target, q, weight)
         loss.backward()
         grad_norm = torch.nn.utils.clip_grad_norm_(self._model.parameters(),
                                                    self._max_grad_norm)
@@ -303,7 +302,6 @@ class ApexDQNAgent(Agent):
     def _loss(self,
               target: torch.Tensor,
               q: torch.Tensor,
-              behavior_q: Optional[torch.Tensor] = None,
               weight: Optional[torch.Tensor] = None) -> torch.Tensor:
         return F.mse_loss(q, target) if weight is None else (
             F.mse_loss(q, target, reduction="none") * weight).mean()
