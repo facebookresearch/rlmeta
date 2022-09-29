@@ -120,7 +120,7 @@ class ApexDQNAgent(Agent):
             reward = reward.clamp(-self._max_abs_reward, self._max_abs_reward)
 
         cur = self._trajectory[-1]
-        cur["reward"] = torch.tensor([reward])
+        cur["reward"] = reward
         cur["action"] = act
         cur["q"] = info["q"]
         cur["v"] = info["v"]
