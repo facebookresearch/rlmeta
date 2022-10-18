@@ -146,6 +146,8 @@ class PrioritizedReplayBufferTest(TestCaseBase):
         replay_buffer.reset()
         self.assertEqual(len(replay_buffer), 0)
         self.assertFalse(replay_buffer._storage._impl.initialized)
+        replay_buffer.extend(self.data)
+        self.assertEqual(len(replay_buffer), len(self.data))
 
     def test_clear(self) -> None:
         replay_buffer = ReplayBuffer(TensorCircularBuffer(self.size),
