@@ -105,6 +105,7 @@ void DefineCircularBuffer(py::module& m) {
                      &CircularBuffer::At, py::const_))
       .def("at", py::overload_cast<const torch::Tensor&>(&CircularBuffer::At,
                                                          py::const_))
+      .def("reset", &CircularBuffer::Reset)
       .def("clear", &CircularBuffer::Clear)
       .def("append", &CircularBuffer::Append)
       .def("extend",

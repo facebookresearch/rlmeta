@@ -79,6 +79,11 @@ class ReplayBuffer(remote.Remotable, Launchable):
         return self.size, self.capacity
 
     @remote.remote_method(batch_size=None)
+    def reset(self) -> None:
+        self._storage.reset()
+        self._sampler.reset()
+
+    @remote.remote_method(batch_size=None)
     def clear(self) -> None:
         self._storage.clear()
         self._sampler.reset()

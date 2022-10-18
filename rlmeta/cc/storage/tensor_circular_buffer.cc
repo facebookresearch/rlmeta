@@ -186,7 +186,7 @@ std::pair<int64_t, std::optional<int64_t>> TensorCircularBuffer::Append(
 void TensorCircularBuffer::LoadData(const py::object& data,
                                     const py::array_t<int64_t>& keys,
                                     int64_t cursor, int64_t next_key) {
-  Clear();
+  Reset();
   schema_.FromPython(data, /*packed_input=*/true);
   initialized_ = true;
   data_.resize(schema_.size());
@@ -342,6 +342,7 @@ void DefineTensorCircularBuffer(py::module& m) {
                      &TensorCircularBuffer::At, py::const_))
       .def("at", py::overload_cast<const torch::Tensor&>(
                      &TensorCircularBuffer::At, py::const_))
+      .def("reset", &TensorCircularBuffer::Reset)
       .def("clear", &TensorCircularBuffer::Clear)
       .def("append", &TensorCircularBuffer::Append)
       .def("extend",

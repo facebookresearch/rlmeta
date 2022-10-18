@@ -25,6 +25,8 @@ class CircularBufferBase {
 
   virtual int64_t Size() const = 0;
 
+  virtual void Reset() { Clear(); }
+
   virtual void Clear() { cursor_ = 0; }
 
   virtual py::object At(int64_t key) const = 0;

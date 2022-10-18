@@ -16,8 +16,8 @@ class RescalerTest(TestCaseBase):
 
     def setUp(self) -> None:
         self.size = (4, 5)
-        self.rtol = 1e-6
-        self.atol = 1e-6
+        self.rtol = 1e-5
+        self.atol = 1e-5
 
     def test_rms_rescaler(self) -> None:
         rms_rescaler = RMSRescaler(self.size)

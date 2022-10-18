@@ -29,6 +29,8 @@ class Schema {
 
   int64_t size() const { return size_; }
 
+  void Reset();
+
   const std::optional<MetaData>& meta() const { return meta_; }
 
   const std::optional<std::vector<Schema>>& vec() const { return vec_; }

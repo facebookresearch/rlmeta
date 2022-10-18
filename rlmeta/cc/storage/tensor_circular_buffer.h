@@ -44,9 +44,15 @@ class TensorCircularBuffer : public CircularBufferBase {
 
   int64_t next_key() const { return next_key_; }
 
+  void Reset() override {
+    Clear();
+    schema_.Reset();
+    data_.clear();
+    initialized_ = false;
+  }
+
   void Clear() override {
     CircularBufferBase::Clear();
-    data_.clear();
     keys_.clear();
     keys_.reserve(capacity_);
     key_to_index_.clear();

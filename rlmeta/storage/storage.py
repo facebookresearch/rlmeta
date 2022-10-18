@@ -38,6 +38,11 @@ class Storage(abc.ABC):
         """
 
     @abc.abstractmethod
+    def reset(self) -> None:
+        """
+        """
+
+    @abc.abstractmethod
     def clear(self) -> None:
         """
         """
