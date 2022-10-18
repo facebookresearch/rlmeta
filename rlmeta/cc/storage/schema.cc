@@ -10,6 +10,28 @@
 
 namespace rlmeta {
 
+void Schema::Reset() {
+  if (meta_.has_value()) {
+    meta_.reset();
+    return;
+  }
+  if (vec_.has_value()) {
+    for (auto& sub : *vec_) {
+      sub.Reset();
+    }
+    vec_->clear();
+    vec_.reset();
+    return;
+  }
+  if (map_.has_value()) {
+    for (auto& [key, sub] : *map_) {
+      sub.Reset();
+    }
+    map_->clear();
+    map_.reset();
+  }
+}
+
 bool Schema::FromPythonImpl(const py::object& obj, bool packed_input,
                             int64_t& index) {
   if (utils::IsTorchTensor(obj)) {

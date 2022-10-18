@@ -17,7 +17,7 @@ from tests.test_utils import TestCaseBase
 
 class ReplayBufferTest(TestCaseBase):
 
-    def setUp(self):
+    def setUp(self) -> None:
         self.size = 8
         self.batch_size = 5
         self.hidden_dim = 4
@@ -30,8 +30,8 @@ class ReplayBufferTest(TestCaseBase):
         self.data = data_utils.unstack_fields(self.flatten_data,
                                               self.batch_size)
 
-    def test_extend(self):
-        self.replay_buffer.clear()
+    def test_extend(self) -> None:
+        self.replay_buffer.reset()
 
         keys = self.replay_buffer.extend(self.data)
         expected_keys = torch.arange(self.batch_size)
@@ -50,8 +50,8 @@ class ReplayBufferTest(TestCaseBase):
         for k, v in data.items():
             self.assert_tensor_equal(v, self.flatten_data[k])
 
-    def test_sample(self):
-        self.replay_buffer.clear()
+    def test_sample(self) -> None:
+        self.replay_buffer.reset()
         self.replay_buffer.extend(self.data)
 
         num_samples = 10000
@@ -63,6 +63,16 @@ class ReplayBufferTest(TestCaseBase):
         self.assert_tensor_close(actual_probs,
                                  torch.full((self.batch_size,), prob),
                                  atol=0.05)
+
+    def test_clear(self) -> None:
+        self.replay_buffer.reset()
+
+        self.replay_buffer.extend(self.data)
+        self.assertEqual(len(self.replay_buffer), len(self.data))
+        self.replay_buffer.clear()
+        self.assertEqual(len(self.replay_buffer), 0)
+        self.replay_buffer.extend(self.data)
+        self.assertEqual(len(self.replay_buffer), len(self.data))
 
 
 class PrioritizedReplayBufferTest(TestCaseBase):
@@ -127,6 +137,27 @@ class PrioritizedReplayBufferTest(TestCaseBase):
         num_samples = 100
         keys, _, probs = replay_buffer.sample(num_samples)
         self.assert_tensor_close(probs, expected_probs[keys], rtol=1e-6)
+
+    def test_reset(self) -> None:
+        replay_buffer = ReplayBuffer(TensorCircularBuffer(self.size),
+                                     PrioritizedSampler(priority_exponent=0.6))
+        replay_buffer.extend(self.data)
+        self.assertEqual(len(replay_buffer), len(self.data))
+        replay_buffer.reset()
+        self.assertEqual(len(replay_buffer), 0)
+        self.assertFalse(replay_buffer._storage._impl.initialized)
+
+    def test_clear(self) -> None:
+        replay_buffer = ReplayBuffer(TensorCircularBuffer(self.size),
+                                     PrioritizedSampler(priority_exponent=0.6))
+
+        replay_buffer.extend(self.data)
+        self.assertEqual(len(replay_buffer), len(self.data))
+        replay_buffer.clear()
+        self.assertEqual(len(replay_buffer), 0)
+        self.assertTrue(replay_buffer._storage._impl.initialized)
+        replay_buffer.extend(self.data)
+        self.assertEqual(len(replay_buffer), len(self.data))
 
 
 if __name__ == "__main__":

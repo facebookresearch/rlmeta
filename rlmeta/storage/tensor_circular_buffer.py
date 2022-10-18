@@ -32,6 +32,9 @@ class TensorCircularBuffer(Storage):
     def size(self) -> int:
         return self._impl.size
 
+    def reset(self) -> None:
+        self._impl.reset()
+
     def clear(self) -> None:
         self._impl.clear()
 
