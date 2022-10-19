@@ -43,7 +43,8 @@ void DefineSampler(py::module& m) {
       .def("delete",
            py::overload_cast<const py::array_t<int64_t>&>(&Sampler::Delete))
       .def("delete", py::overload_cast<const torch::Tensor&>(&Sampler::Delete))
-      .def("sample", &Sampler::Sample);
+      .def("sample", &Sampler::Sample, py::arg("num_samples"),
+           py::arg("replacement") = false);
 }
 
 }  // namespace rlmeta

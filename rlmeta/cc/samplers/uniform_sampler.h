@@ -49,6 +49,7 @@ class UniformSampler : public Sampler {
   int64_t Size() const override { return keys_.size(); }
 
   void Reset() override {
+    random_gen_.seed();
     keys_.clear();
     key_to_index_.clear();
   }
@@ -172,8 +173,6 @@ class UniformSampler : public Sampler {
     return mask;
   }
 
-  KeysAndPriorities Sample(int64_t num) const override;
-
   py::array_t<int64_t> DumpKeys() const {
     return utils::AsNumpyArray<int64_t>(keys_);
   }
@@ -181,6 +180,10 @@ class UniformSampler : public Sampler {
   void LoadKeys(const py::array_t<int64_t>& arr);
 
  protected:
+  KeysAndProbabilities SampleWithReplacement(int64_t num_samples) override;
+
+  KeysAndProbabilities SampleWithoutReplacement(int64_t num_samples) override;
+
   void InsertImpl(int64_t n, const int64_t* keys, double priority, bool* mask);
   void InsertImpl(int64_t n, const int64_t* keys, const double* priorities,
                   bool* mask);
