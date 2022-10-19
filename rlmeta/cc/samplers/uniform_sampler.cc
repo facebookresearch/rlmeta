@@ -5,25 +5,65 @@
 
 #include "rlmeta/cc/samplers/uniform_sampler.h"
 
+#include <algorithm>
+#include <iostream>
 #include <memory>
 #include <random>
 
 namespace rlmeta {
 
-KeysAndPriorities UniformSampler::Sample(int64_t num) const {
+KeysAndProbabilities UniformSampler::SampleWithReplacement(
+    int64_t num_samples) {
   const int64_t n = keys_.size();
-  py::array_t<int64_t> keys(num);
-  py::array_t<double> priorities(num);
   std::uniform_int_distribution<int64_t> distrib(0, n - 1);
+  py::array_t<int64_t> keys(num_samples);
+  py::array_t<double> probabilities(num_samples);
   int64_t* keys_data = keys.mutable_data();
-  double* priorities_data = priorities.mutable_data();
-  for (int64_t i = 0; i < num; ++i) {
+  double* probabilities_data = probabilities.mutable_data();
+  std::fill(probabilities_data, probabilities_data + num_samples,
+            1.0 / static_cast<double>(n));
+  for (int64_t i = 0; i < num_samples; ++i) {
     const int64_t index = distrib(random_gen_);
     keys_data[i] = keys_[index];
-    priorities_data[i] = 1.0 / static_cast<double>(n);
   }
   return std::make_pair<py::array_t<int64_t>, py::array_t<double>>(
-      std::move(keys), std::move(priorities));
+      std::move(keys), std::move(probabilities));
+}
+
+KeysAndProbabilities UniformSampler::SampleWithoutReplacement(
+    int64_t num_samples) {
+  std::uniform_int_distribution<int64_t> distrib;
+  using ParamType = std::uniform_int_distribution<int64_t>::param_type;
+
+  const int64_t n = keys_.size();
+  if (num_samples > n) {
+    std::cerr << "[UniformSampler] Cannot take a larger sample than population "
+                 "when \'replacement=False\'"
+              << std::endl;
+    assert(false);
+  }
+  std::vector<int64_t> sampled_indices;
+  sampled_indices.reserve(num_samples);
+
+  py::array_t<int64_t> keys(num_samples);
+  py::array_t<double> probabilities(num_samples);
+  int64_t* keys_data = keys.mutable_data();
+  double* probabilities_data = probabilities.mutable_data();
+  std::fill(probabilities_data, probabilities_data + num_samples,
+            1.0 / static_cast<double>(n));
+  for (int64_t i = 0; i < num_samples; ++i) {
+    const int64_t index = distrib(random_gen_, ParamType(0, n - i - 1));
+    sampled_indices.push_back(index);
+    keys_data[i] = keys_[index];
+    std::swap(keys_[n - i - 1], keys_[index]);
+  }
+  // Recover keys_.
+  for (int64_t i = num_samples - 1; i >= 0; --i) {
+    std::swap(keys_[n - i - 1], keys_[sampled_indices[i]]);
+  }
+
+  return std::make_pair<py::array_t<int64_t>, py::array_t<double>>(
+      std::move(keys), std::move(probabilities));
 }
 
 void UniformSampler::LoadKeys(const py::array_t<int64_t>& arr) {

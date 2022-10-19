@@ -110,9 +110,12 @@ class ReplayBuffer(remote.Remotable, Launchable):
         return torch.from_numpy(new_keys)
 
     @remote.remote_method(batch_size=None)
-    def sample(self,
-               num: int) -> Tuple[torch.Tensor, NestedTensor, torch.Tensor]:
-        keys, probabilities = self._sampler.sample(num)
+    def sample(
+        self,
+        num_samples: int,
+        replacement: bool = False
+    ) -> Tuple[torch.Tensor, NestedTensor, torch.Tensor]:
+        keys, probabilities = self._sampler.sample(num_samples, replacement)
         values = self._storage[keys]
         return torch.from_numpy(keys), values, torch.from_numpy(probabilities)
 
@@ -152,7 +155,9 @@ class RemoteReplayBuffer(remote.Remote):
         return self._prefetch
 
     def sample(
-        self, batch_size: int
+        self,
+        num_samples: int,
+        replacement: bool = False
     ) -> Union[NestedTensor, Tuple[NestedTensor, torch.Tensor, torch.Tensor,
                                    torch.Tensor]]:
         if len(self._futures) > 0:
@@ -160,18 +165,20 @@ class RemoteReplayBuffer(remote.Remote):
         else:
             ret = self.client.sync(self.server_name,
                                    self.remote_method_name("sample"),
-                                   batch_size)
+                                   num_samples, replacement)
 
         while len(self._futures) < self.prefetch:
             fut = self.client.async_(self.server_name,
                                      self.remote_method_name("sample"),
-                                     batch_size)
+                                     num_samples, replacement)
             self._futures.append(fut)
 
         return ret
 
     async def async_sample(
-        self, batch_size: int
+        self,
+        num_samples: int,
+        replacement: bool = False
     ) -> Union[NestedTensor, Tuple[NestedTensor, torch.Tensor, torch.Tensor,
                                    torch.Tensor]]:
         if len(self._futures) > 0:
@@ -179,12 +186,12 @@ class RemoteReplayBuffer(remote.Remote):
         else:
             ret = await self.client.async_(self.server_name,
                                            self.remote_method_name("sample"),
-                                           batch_size)
+                                           num_samples, replacement)
 
         while len(self._futures) < self.prefetch:
             fut = self.client.async_(self.server_name,
                                      self.remote_method_name("sample"),
-                                     batch_size)
+                                     num_samples, replacement)
             self._futures.append(fut)
 
         return ret

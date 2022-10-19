@@ -54,15 +54,31 @@ class ReplayBufferTest(TestCaseBase):
         self.replay_buffer.reset()
         self.replay_buffer.extend(self.data)
 
-        num_samples = 10000
         prob = 1.0 / self.batch_size
+
+        num_samples = self.batch_size
         keys, _, probs = self.replay_buffer.sample(num_samples)
+        expected_probs = torch.full_like(probs, prob)
+        self.assert_tensor_equal(probs, expected_probs)
+        count = torch.bincount(keys)
+        self.assertEqual(count.max().item(), 1)
+        count = torch.zeros(self.batch_size, dtype=torch.int64)
+        for _ in range(10000):
+            keys, _, _ = self.replay_buffer.sample(2)
+            count[keys] += 1
+        actual_probs = count / count.sum()
+        expected_probs = torch.full_like(actual_probs, prob)
+        self.assert_tensor_close(actual_probs, expected_probs, atol=0.05)
+
+        # Test sample with replacement.
+        num_samples = 10000
+        keys, _, probs = self.replay_buffer.sample(num_samples,
+                                                   replacement=True)
         self.assert_tensor_equal(
             probs, torch.full((num_samples,), prob, dtype=torch.float64))
         actual_probs = torch.bincount(keys).float() / num_samples
-        self.assert_tensor_close(actual_probs,
-                                 torch.full((self.batch_size,), prob),
-                                 atol=0.05)
+        expected_probs = torch.full_like(actual_probs, prob)
+        self.assert_tensor_close(actual_probs, expected_probs, atol=0.05)
 
     def test_clear(self) -> None:
         self.replay_buffer.reset()
@@ -115,9 +131,22 @@ class PrioritizedReplayBufferTest(TestCaseBase):
         expected_probs = priorities / priorities.sum()
         replay_buffer.extend(self.data, priorities=priorities)
 
-        num_samples = 1000
+        # Test sample without replacement
+        num_samples = self.batch_size
         keys, _, probs = replay_buffer.sample(num_samples)
+        self.assert_tensor_close(probs, expected_probs[keys], rtol=1e-6)
+        count = torch.bincount(keys)
+        self.assertEqual(count.max().item(), 1)
+        count = torch.zeros(self.batch_size, dtype=torch.int64)
+        for _ in range(10000):
+            keys, _, _ = replay_buffer.sample(2)
+            count[keys] += 1
+        actual_probs = count / count.sum()
+        self.assert_tensor_close(actual_probs, expected_probs, atol=0.1)
 
+        # Test sample with replacement.
+        num_samples = 1000
+        keys, _, probs = replay_buffer.sample(num_samples, replacement=True)
         actual_probs = torch.bincount(keys).float() / num_samples
         self.assert_tensor_close(probs, expected_probs[keys], rtol=1e-6)
         self.assert_tensor_close(actual_probs, expected_probs, atol=0.05)
@@ -135,7 +164,7 @@ class PrioritizedReplayBufferTest(TestCaseBase):
         replay_buffer.update(keys, priorities)
 
         num_samples = 100
-        keys, _, probs = replay_buffer.sample(num_samples)
+        keys, _, probs = replay_buffer.sample(num_samples, replacement=True)
         self.assert_tensor_close(probs, expected_probs[keys], rtol=1e-6)
 
     def test_reset(self) -> None:

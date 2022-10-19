@@ -17,7 +17,8 @@ namespace py = pybind11;
 
 namespace rlmeta {
 
-using KeysAndPriorities = std::pair<py::array_t<int64_t>, py::array_t<double>>;
+using KeysAndProbabilities =
+    std::pair<py::array_t<int64_t>, py::array_t<double>>;
 
 class Sampler {
  public:
@@ -48,10 +49,17 @@ class Sampler {
   virtual py::array_t<bool> Delete(const py::array_t<int64_t>& keys) = 0;
   virtual torch::Tensor Delete(const torch::Tensor& keys) = 0;
 
-  virtual KeysAndPriorities Sample(int64_t num) const = 0;
+  virtual KeysAndProbabilities Sample(int64_t num_samples, bool replacement) {
+    return replacement ? SampleWithReplacement(num_samples)
+                       : SampleWithoutReplacement(num_samples);
+  }
 
  protected:
-  mutable std::mt19937_64 random_gen_{std::random_device()()};
+  virtual KeysAndProbabilities SampleWithReplacement(int64_t num_samples) = 0;
+  virtual KeysAndProbabilities SampleWithoutReplacement(
+      int64_t num_samples) = 0;
+
+  std::mt19937_64 random_gen_{std::random_device()()};
 };
 
 class PySampler : public Sampler {
@@ -126,8 +134,9 @@ class PySampler : public Sampler {
     PYBIND11_OVERRIDE_PURE(torch::Tensor, Sampler, Delete, keys);
   }
 
-  KeysAndPriorities Sample(int64_t num) const override {
-    PYBIND11_OVERRIDE_PURE(KeysAndPriorities, Sampler, Sample, num);
+  KeysAndProbabilities Sample(int64_t num_samples, bool replacement) override {
+    PYBIND11_OVERRIDE_PURE(KeysAndProbabilities, Sampler, Sample, num_samples,
+                           replacement);
   }
 };
 

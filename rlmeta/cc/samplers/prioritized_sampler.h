@@ -213,8 +213,6 @@ class PrioritizedSampler : public Sampler {
     return mask;
   }
 
-  KeysAndPriorities Sample(int64_t num) const override;
-
   py::array_t<int64_t> DumpKeys() const {
     return utils::AsNumpyArray<int64_t>(keys_);
   }
@@ -235,6 +233,10 @@ class PrioritizedSampler : public Sampler {
   }
 
  protected:
+  KeysAndProbabilities SampleWithReplacement(int64_t num_samples) override;
+
+  KeysAndProbabilities SampleWithoutReplacement(int64_t num_samples) override;
+
   double ComputePriority(double priority) const {
     return std::pow(priority + eps_, priority_exponent_);
   }

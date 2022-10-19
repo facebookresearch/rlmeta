@@ -10,21 +10,63 @@
 
 namespace rlmeta {
 
-KeysAndPriorities PrioritizedSampler::Sample(int64_t num) const {
-  py::array_t<int64_t> keys(num);
-  py::array_t<double> priorities(num);
+KeysAndProbabilities PrioritizedSampler::SampleWithReplacement(
+    int64_t num_samples) {
+  py::array_t<int64_t> keys(num_samples);
+  py::array_t<double> probabilities(num_samples);
   const double sum = sum_tree_.Query(0, sum_tree_.size());
-  std::uniform_real_distribution<double> distrib(0, sum);
+  std::uniform_real_distribution<double> distrib(0.0, sum);
   int64_t* keys_data = keys.mutable_data();
-  double* priorities_data = priorities.mutable_data();
-  for (int64_t i = 0; i < num; ++i) {
+  double* probabilities_data = probabilities.mutable_data();
+  for (int64_t i = 0; i < num_samples; ++i) {
     const double mass = distrib(random_gen_);
     const int64_t index = sum_tree_.ScanLowerBound(mass);
     keys_data[i] = keys_[index];
-    priorities_data[i] = sum_tree_.At(index) / sum;
+    probabilities_data[i] = sum_tree_.At(index) / sum;
   }
   return std::make_pair<py::array_t<int64_t>, py::array_t<double>>(
-      std::move(keys), std::move(priorities));
+      std::move(keys), std::move(probabilities));
+}
+
+KeysAndProbabilities PrioritizedSampler::SampleWithoutReplacement(
+    int64_t num_samples) {
+  std::uniform_real_distribution<double> distrib;
+  using ParamType = std::uniform_real_distribution<double>::param_type;
+
+  const int64_t n = keys_.size();
+  if (num_samples > n) {
+    std::cerr << "[PrioritizedSampler] Cannot take a larger sample than "
+                 "population when \'replacement=False\'"
+              << std::endl;
+    assert(false);
+  }
+  std::vector<int64_t> sampled_indices;
+  sampled_indices.reserve(num_samples);
+
+  py::array_t<int64_t> keys(num_samples);
+  py::array_t<double> probabilities(num_samples);
+  int64_t* keys_data = keys.mutable_data();
+  double* probabilities_data = probabilities.mutable_data();
+  for (int64_t i = 0; i < num_samples; ++i) {
+    const double sum = sum_tree_.Query(0, sum_tree_.size());
+    const double mass = distrib(random_gen_, ParamType(0.0, sum));
+    const int64_t index = sum_tree_.ScanLowerBound(mass);
+    sampled_indices.push_back(index);
+    keys_data[i] = keys_[index];
+    probabilities_data[i] = sum_tree_.At(index);
+    sum_tree_.Update(index, 0.0);
+  }
+  // Recover sum_tree_.
+  for (int64_t i = 0; i < num_samples; ++i) {
+    sum_tree_.Update(sampled_indices[i], probabilities_data[i]);
+  }
+  double sum = sum_tree_.Query(0, sum_tree_.size());
+  for (int64_t i = 0; i < num_samples; ++i) {
+    probabilities_data[i] /= sum;
+  }
+
+  return std::make_pair<py::array_t<int64_t>, py::array_t<double>>(
+      std::move(keys), std::move(probabilities));
 }
 
 py::array_t<double> PrioritizedSampler::DumpPriorities() const {
