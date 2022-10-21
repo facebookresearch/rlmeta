@@ -21,7 +21,7 @@ from rlmeta.agents.agent import Agent
 from rlmeta.core.controller import Controller, ControllerLike, Phase
 from rlmeta.core.model import ModelLike
 from rlmeta.core.replay_buffer import ReplayBufferLike
-from rlmeta.core.rescalers import Rescaler, RMSRescaler
+from rlmeta.core.rescalers import Rescaler, StdRescaler
 from rlmeta.core.types import Action, TimeStep
 from rlmeta.core.types import Tensor, NestedTensor
 from rlmeta.utils.stats_dict import StatsDict
@@ -69,7 +69,7 @@ class PPOAgent(Agent):
         self._vf_loss_coeff = vf_loss_coeff
         self._entropy_coeff = entropy_coeff
         self._rescale_reward = rescale_reward
-        self._reward_rescaler = RMSRescaler(size=1) if rescale_reward else None
+        self._reward_rescaler = StdRescaler(size=1) if rescale_reward else None
         self._normalize_advantage = normalize_advantage
 
         self._learning_starts = learning_starts
@@ -228,24 +228,19 @@ class PPOAgent(Agent):
     ) -> Tuple[Iterable[torch.Tensor], Iterable[torch.Tensor]]:
         adv = []
         ret = []
-        v = torch.zeros(1)
         gae = torch.zeros(1)
+        v = torch.zeros(1)
+        r = torch.zeros(1)
         for value, reward in zip(reversed(values), reversed(rewards)):
-            next_v = v
-            v = value
             if reward_rescaler is not None:
-                v = reward_rescaler.recover(v)
-            delta = reward + self._gamma * next_v - v
+                r = reward + self._gamma * r
+                reward_rescaler.update(r)
+                reward = reward_rescaler.rescale(reward)
+            delta = reward + self._gamma * v - value
+            v = value
             gae = delta + self._gamma * self._gae_lambda * gae
             adv.append(gae)
             ret.append(gae + v)
-
-        if reward_rescaler is not None:
-            ret = data_utils.stack_tensors(ret)
-            reward_rescaler.update(ret)
-            ret = reward_rescaler.rescale(ret)
-            ret = ret.unbind()
-
         return reversed(adv), reversed(ret)
 
     def _train_step(self, batch: NestedTensor) -> Dict[str, float]:
