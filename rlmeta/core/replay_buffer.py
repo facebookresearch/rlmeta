@@ -42,6 +42,10 @@ console = Console()
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+IndexType = Union[int, Tensor]
+KeyType = Union[int, Tensor]
+ValueType = Union[NestedTensor, Sequence[NestedTensor]]
+
 
 class ReplayBuffer(remote.Remotable, Launchable):
 
@@ -57,9 +61,8 @@ class ReplayBuffer(remote.Remotable, Launchable):
     def __len__(self) -> int:
         return len(self._storage)
 
-    def __getitem__(self, key: Union[int, Tensor]) -> NestedTensor:
-        # return self._storage[key]
-        return self._storage.get(key)
+    def __getitem__(self, index: IndexType) -> Tuple[KeyType, ValueType]:
+        return self._storage.at(index)
 
     @property
     def capacity(self) -> int:
@@ -90,6 +93,14 @@ class ReplayBuffer(remote.Remotable, Launchable):
         self._sampler.reset()
 
     @remote.remote_method(batch_size=None)
+    def at(self, index: IndexType) -> Tuple[KeyType, ValueType]:
+        return self._storage.at(index)
+
+    @remote.remote_method(batch_size=None)
+    def get(self, key: KeyType) -> ValueType:
+        return self._storage.get(key)
+
+    @remote.remote_method(batch_size=None)
     def append(self, data: NestedTensor, priority: float = 1.0) -> int:
         new_key, old_key = self._storage.append(data)
         self._sampler.insert(new_key, priority)
@@ -117,7 +128,6 @@ class ReplayBuffer(remote.Remotable, Launchable):
         replacement: bool = False
     ) -> Tuple[torch.Tensor, NestedTensor, torch.Tensor]:
         keys, probabilities = self._sampler.sample(num_samples, replacement)
-        # values = self._storage[keys]
         values = self._storage.get(keys)
         return torch.from_numpy(keys), values, torch.from_numpy(probabilities)
 

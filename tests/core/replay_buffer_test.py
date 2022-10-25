@@ -37,7 +37,7 @@ class ReplayBufferTest(TestCaseBase):
         expected_keys = torch.arange(self.batch_size)
         self.assertEqual(len(self.replay_buffer), self.batch_size)
         self.assert_tensor_equal(keys, expected_keys)
-        data = self.replay_buffer[keys]
+        data = self.replay_buffer.get(keys)
         self.assertEqual(data.keys(), self.flatten_data.keys())
         for k, v in data.items():
             self.assert_tensor_equal(v, self.flatten_data[k])
@@ -45,7 +45,7 @@ class ReplayBufferTest(TestCaseBase):
         keys = self.replay_buffer.extend(self.data)
         self.assertEqual(len(self.replay_buffer), self.size)
         self.assert_tensor_equal(keys, expected_keys + self.batch_size)
-        data = self.replay_buffer[keys]
+        data = self.replay_buffer.get(keys)
         self.assertEqual(data.keys(), self.flatten_data.keys())
         for k, v in data.items():
             self.assert_tensor_equal(v, self.flatten_data[k])
@@ -111,7 +111,7 @@ class PrioritizedReplayBufferTest(TestCaseBase):
         expected_keys = torch.arange(self.batch_size)
         self.assertEqual(len(replay_buffer), self.batch_size)
         self.assert_tensor_equal(keys, expected_keys)
-        data = replay_buffer[keys]
+        data = replay_buffer.get(keys)
         self.assertEqual(data.keys(), self.flatten_data.keys())
         for k, v in data.items():
             self.assert_tensor_equal(v, self.flatten_data[k])
@@ -119,7 +119,7 @@ class PrioritizedReplayBufferTest(TestCaseBase):
         keys = replay_buffer.extend(self.data)
         self.assertEqual(len(replay_buffer), self.size)
         self.assert_tensor_equal(keys, expected_keys + self.batch_size)
-        data = replay_buffer[keys]
+        data = replay_buffer.get(keys)
         self.assertEqual(data.keys(), self.flatten_data.keys())
         for k, v in data.items():
             self.assert_tensor_equal(v, self.flatten_data[k])
