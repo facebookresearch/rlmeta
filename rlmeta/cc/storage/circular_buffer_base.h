@@ -13,6 +13,8 @@
 #include <cstdint>
 #include <optional>
 
+namespace py = pybind11;
+
 namespace rlmeta {
 
 class CircularBufferBase {
@@ -23,15 +25,26 @@ class CircularBufferBase {
 
   int64_t cursor() const { return cursor_; }
 
+  virtual bool Empty() const { return Size() == 0; }
+
   virtual int64_t Size() const = 0;
 
   virtual void Reset() { Clear(); }
 
   virtual void Clear() { cursor_ = 0; }
 
-  virtual py::object At(int64_t key) const = 0;
-  virtual py::object At(const py::array_t<int64_t>& keys) const = 0;
-  virtual py::object At(const torch::Tensor& keys) const = 0;
+  virtual std::pair<int64_t, py::object> Front() const { return At(0); }
+  virtual std::pair<int64_t, py::object> Back() const { return At(-1); }
+
+  virtual std::pair<int64_t, py::object> At(int64_t index) const = 0;
+  virtual std::pair<py::array_t<int64_t>, py::object> At(
+      const py::array_t<int64_t>& indices) const = 0;
+  virtual std::pair<torch::Tensor, py::object> At(
+      const torch::Tensor& indices) const = 0;
+
+  virtual py::object Get(int64_t key) const = 0;
+  virtual py::object Get(const py::array_t<int64_t>& keys) const = 0;
+  virtual py::object Get(const torch::Tensor& keys) const = 0;
 
   virtual std::pair<int64_t, std::optional<int64_t>> Append(
       const py::object& o) = 0;
@@ -42,6 +55,11 @@ class CircularBufferBase {
       const py::list& src) = 0;
 
  protected:
+  int64_t AbsoluteIndex(int64_t index) const {
+    const int64_t size = Size();
+    return size == 0 ? -1 : ((cursor_ + index) % size + size) % size;
+  }
+
   void NextCursor() {
     ++cursor_;
     if (cursor_ == capacity_) {

@@ -153,20 +153,6 @@ void LoadNested(const Schema& schema, const py::object& src,
 
 }  // namespace
 
-py::object TensorCircularBuffer::At(int64_t key) const {
-  const auto it = key_to_index_.find(key);
-  if (it == key_to_index_.end()) {
-    return py::none();
-  }
-  const int64_t index = it->second;
-  std::vector<torch::Tensor> ret;
-  ret.reserve(data_.size());
-  for (const torch::Tensor& tensor : data_) {
-    ret.push_back(tensor[index].clone());
-  }
-  return RecoverNested(ret);
-}
-
 std::pair<int64_t, std::optional<int64_t>> TensorCircularBuffer::Append(
     const py::object& o) {
   if (!initialized_) {
@@ -213,8 +199,45 @@ py::object TensorCircularBuffer::RecoverNested(
   return RecoverNestedImpl(schema_, src);
 }
 
-py::object TensorCircularBuffer::BatchedAtImpl(int64_t n,
-                                               const int64_t* keys) const {
+std::vector<int64_t> TensorCircularBuffer::AbsoluteIndices(
+    int64_t n, const int64_t* indices) const {
+  std::vector<int64_t> ret(n);
+  for (int64_t i = 0; i < n; ++i) {
+    ret[i] = AbsoluteIndex(indices[i]);
+  }
+  return ret;
+}
+
+py::object TensorCircularBuffer::AtImpl(int64_t index) const {
+  std::vector<torch::Tensor> ret;
+  ret.reserve(data_.size());
+  for (const torch::Tensor& tensor : data_) {
+    ret.push_back(tensor[index].clone());
+  }
+  return RecoverNested(ret);
+}
+
+void TensorCircularBuffer::BatchedKeyAtImpl(int64_t n, const int64_t* indices,
+                                            int64_t* keys) const {
+  for (int64_t i = 0; i < n; ++i) {
+    keys[i] = keys_.at(indices[i]);
+  }
+}
+
+py::object TensorCircularBuffer::BatchedValueAtImpl(
+    int64_t n, const int64_t* indices) const {
+  const torch::Tensor indices_tensor =
+      torch::from_blob(const_cast<int64_t*>(indices), {n}, torch::kInt64);
+  std::vector<torch::Tensor> ret;
+  ret.reserve(data_.size());
+  for (const torch::Tensor& tensor : data_) {
+    ret.push_back(tensor.index({indices_tensor}));
+  }
+  return RecoverNested(ret);
+}
+
+py::object TensorCircularBuffer::BatchedGetImpl(int64_t n,
+                                                const int64_t* keys) const {
   std::vector<int64_t> indices;
   indices.reserve(n);
   for (int64_t i = 0; i < n; ++i) {
@@ -223,13 +246,7 @@ py::object TensorCircularBuffer::BatchedAtImpl(int64_t n,
       indices.push_back(it->second);
     }
   }
-  const torch::Tensor indices_tensor = torch::tensor(indices, torch::kInt64);
-  std::vector<torch::Tensor> ret;
-  ret.reserve(data_.size());
-  for (const torch::Tensor& tensor : data_) {
-    ret.push_back(tensor.index({indices_tensor}));
-  }
-  return RecoverNested(ret);
+  return BatchedValueAtImpl(indices.size(), indices.data());
 }
 
 std::pair<int64_t, std::optional<int64_t>> TensorCircularBuffer::Reserve() {
@@ -336,14 +353,22 @@ void DefineTensorCircularBuffer(py::module& m) {
                               &TensorCircularBuffer::At, py::const_))
       .def("__getitem__", py::overload_cast<const torch::Tensor&>(
                               &TensorCircularBuffer::At, py::const_))
+      .def("reset", &TensorCircularBuffer::Reset)
+      .def("clear", &TensorCircularBuffer::Clear)
+      .def("front", &TensorCircularBuffer::Front)
+      .def("back", &TensorCircularBuffer::Back)
       .def("at",
            py::overload_cast<int64_t>(&TensorCircularBuffer::At, py::const_))
       .def("at", py::overload_cast<const py::array_t<int64_t>&>(
                      &TensorCircularBuffer::At, py::const_))
       .def("at", py::overload_cast<const torch::Tensor&>(
                      &TensorCircularBuffer::At, py::const_))
-      .def("reset", &TensorCircularBuffer::Reset)
-      .def("clear", &TensorCircularBuffer::Clear)
+      .def("get",
+           py::overload_cast<int64_t>(&TensorCircularBuffer::Get, py::const_))
+      .def("get", py::overload_cast<const py::array_t<int64_t>&>(
+                      &TensorCircularBuffer::Get, py::const_))
+      .def("get", py::overload_cast<const torch::Tensor&>(
+                      &TensorCircularBuffer::Get, py::const_))
       .def("append", &TensorCircularBuffer::Append)
       .def("extend",
            py::overload_cast<const py::tuple&>(&TensorCircularBuffer::Extend))
