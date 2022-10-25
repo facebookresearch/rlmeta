@@ -3,7 +3,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Any, Iterable, Dict, Union
+from typing import Any, Iterable, Dict, Optional, Union
 
 import torch
 
@@ -24,8 +24,9 @@ _NAME_TO_OPTIMIZER = {
 }
 
 
-def make_optimizer(name: "str", params: Union[Iterable[torch.Tensor],
-                                              Dict[str, torch.Tensor]],
-                   args: Dict[str, Any]):
+def get_optimizer(
+        name: str,
+        params: Union[Iterable[torch.Tensor], Dict[str, torch.Tensor]],
+        args: Optional[Dict[str, Any]] = None) -> torch.optim.Optimizer:
     optimizer = _NAME_TO_OPTIMIZER[name.lower()]
-    return optimizer(params, **args)
+    return optimizer(params) if args is None else optimizer(params, **args)

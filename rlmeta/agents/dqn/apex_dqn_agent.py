@@ -36,6 +36,7 @@ class ApexDQNAgent(Agent):
         eps: float = 0.1,
         replay_buffer: Optional[ReplayBufferLike] = None,
         controller: Optional[ControllerLike] = None,
+        loss_fn: Optional[nn.Module] = None,
         optimizer: Optional[torch.optim.Optimizer] = None,
         batch_size: int = 512,
         max_grad_norm: float = 40.0,
@@ -60,6 +61,7 @@ class ApexDQNAgent(Agent):
         self._replay_buffer = replay_buffer
         self._controller = controller
 
+        self._loss_fn = loss_fn
         self._optimizer = optimizer
         self._batch_size = batch_size
         self._max_grad_norm = max_grad_norm
@@ -303,8 +305,12 @@ class ApexDQNAgent(Agent):
               target: torch.Tensor,
               q: torch.Tensor,
               weight: Optional[torch.Tensor] = None) -> torch.Tensor:
-        return F.mse_loss(q, target) if weight is None else (
-            F.mse_loss(q, target, reduction="none") * weight).mean()
+        if self._loss_fn is None:
+            return F.mse_loss(q, target) if weight is None else (
+                F.mse_loss(q, target, reduction="none") * weight).mean()
+        else:
+            return self._loss_fn(q, target).mean() if weight is None else (
+                self._loss_fn(q, target) * weight).mean()
 
 
 class ApexDQNAgentFactory(AgentFactory):
@@ -314,6 +320,7 @@ class ApexDQNAgentFactory(AgentFactory):
         model: ModelLike,
         eps_func: Callable[[int], float],
         replay_buffer: Optional[ReplayBufferLike] = None,
+        loss_fn: Optional[nn.Module] = None,
         controller: Optional[ControllerLike] = None,
         optimizer: Optional[torch.optim.Optimizer] = None,
         batch_size: int = 512,
@@ -335,6 +342,7 @@ class ApexDQNAgentFactory(AgentFactory):
         self._eps_func = eps_func
         self._replay_buffer = replay_buffer
         self._controller = controller
+        self._loss_fn = loss_fn
         self._optimizer = optimizer
         self._batch_size = batch_size
         self._max_grad_norm = max_grad_norm
@@ -360,6 +368,7 @@ class ApexDQNAgentFactory(AgentFactory):
             eps,
             replay_buffer,
             controller,
+            self._loss_fn,
             self._optimizer,
             self._batch_size,
             self._max_grad_norm,
