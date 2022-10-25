@@ -27,7 +27,8 @@ from rlmeta.core.replay_buffer import ReplayBuffer, make_remote_replay_buffer
 from rlmeta.core.server import Server, ServerList
 from rlmeta.samplers import PrioritizedSampler
 from rlmeta.storage import TensorCircularBuffer
-from rlmeta.utils.optimizer_utils import make_optimizer
+from rlmeta.utils.loss_utils import get_loss
+from rlmeta.utils.optimizer_utils import get_optimizer
 
 
 @hydra.main(config_path="./conf", config_name="conf_apex_dqn")
@@ -36,8 +37,9 @@ def main(cfg):
 
     env = atari_wrappers.make_atari(cfg.env)
     train_model = AtariDQNModel(env.action_space.n).to(cfg.train_device)
-    optimizer = make_optimizer(cfg.optimizer.name, train_model.parameters(),
-                               cfg.optimizer.args)
+    loss = get_loss(cfg.loss.name)
+    optimizer = get_optimizer(cfg.optimizer.name, train_model.parameters(),
+                              cfg.optimizer.args)
 
     infer_model = copy.deepcopy(train_model).to(cfg.infer_device)
 
@@ -77,6 +79,7 @@ def main(cfg):
         a_model,
         replay_buffer=a_rb,
         controller=a_ctrl,
+        loss_fn=loss,
         optimizer=optimizer,
         batch_size=cfg.batch_size,
         n_step=cfg.n_step,

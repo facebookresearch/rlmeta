@@ -22,7 +22,7 @@ num_eval_workers: 4
 train_eps: 0.4
 eval_eps: 0.01
 
-replay_buffer_size: 262144
+replay_buffer_size: 1000000
 priority_exponent: 0.6
 prefetch: 2
 
@@ -35,6 +35,9 @@ batch_size: 512
 n_step: 3
 learning_starts: 65536
 model_push_period: 10
+
+loss:
+  name: "huber_loss"
 
 optimizer:
   name: "Adam"

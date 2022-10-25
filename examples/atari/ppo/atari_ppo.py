@@ -28,7 +28,7 @@ from rlmeta.core.replay_buffer import ReplayBuffer, make_remote_replay_buffer
 from rlmeta.core.server import Server, ServerList
 from rlmeta.samplers import UniformSampler
 from rlmeta.storage import TensorCircularBuffer
-from rlmeta.utils.optimizer_utils import make_optimizer
+from rlmeta.utils.optimizer_utils import get_optimizer
 
 
 @hydra.main(config_path="./conf", config_name="conf_ppo")
@@ -37,8 +37,8 @@ def main(cfg):
 
     env = atari_wrappers.make_atari(cfg.env)
     train_model = AtariPPOModel(env.action_space.n).to(cfg.train_device)
-    optimizer = make_optimizer(cfg.optimizer.name, train_model.parameters(),
-                               cfg.optimizer.args)
+    optimizer = get_optimizer(cfg.optimizer.name, train_model.parameters(),
+                              cfg.optimizer.args)
 
     infer_model = copy.deepcopy(train_model).to(cfg.infer_device)
 
