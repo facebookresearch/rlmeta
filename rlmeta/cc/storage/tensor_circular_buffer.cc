@@ -209,9 +209,6 @@ std::vector<int64_t> TensorCircularBuffer::AbsoluteIndices(
 }
 
 py::object TensorCircularBuffer::AtImpl(int64_t index) const {
-  if (index < 0) {
-    index += keys_.size();
-  }
   std::vector<torch::Tensor> ret;
   ret.reserve(data_.size());
   for (const torch::Tensor& tensor : data_) {
