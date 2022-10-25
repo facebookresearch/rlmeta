@@ -63,15 +63,15 @@ class ReplayBufferTest(TestCaseBase):
         count = torch.bincount(keys)
         self.assertEqual(count.max().item(), 1)
         count = torch.zeros(self.batch_size, dtype=torch.int64)
-        for _ in range(10000):
-            keys, _, _ = self.replay_buffer.sample(2)
+        for _ in range(20000):
+            keys, _, _ = self.replay_buffer.sample(3)
             count[keys] += 1
         actual_probs = count / count.sum()
         expected_probs = torch.full_like(actual_probs, prob)
         self.assert_tensor_close(actual_probs, expected_probs, atol=0.05)
 
         # Test sample with replacement.
-        num_samples = 10000
+        num_samples = 20000
         keys, _, probs = self.replay_buffer.sample(num_samples,
                                                    replacement=True)
         self.assert_tensor_equal(
@@ -134,18 +134,21 @@ class PrioritizedReplayBufferTest(TestCaseBase):
         # Test sample without replacement
         num_samples = self.batch_size
         keys, _, probs = replay_buffer.sample(num_samples)
-        self.assert_tensor_close(probs, expected_probs[keys], rtol=1e-6)
+        self.assert_tensor_close(probs,
+                                 expected_probs[keys],
+                                 rtol=1e-6,
+                                 atol=1e-6)
         count = torch.bincount(keys)
         self.assertEqual(count.max().item(), 1)
         count = torch.zeros(self.batch_size, dtype=torch.int64)
-        for _ in range(10000):
-            keys, _, _ = replay_buffer.sample(2)
+        for _ in range(100000):
+            keys, _, _ = replay_buffer.sample(3)
             count[keys] += 1
         actual_probs = count / count.sum()
         self.assert_tensor_close(actual_probs, expected_probs, atol=0.1)
 
         # Test sample with replacement.
-        num_samples = 1000
+        num_samples = 100000
         keys, _, probs = replay_buffer.sample(num_samples, replacement=True)
         actual_probs = torch.bincount(keys).float() / num_samples
         self.assert_tensor_close(probs, expected_probs[keys], rtol=1e-6)

@@ -58,7 +58,8 @@ class ReplayBuffer(remote.Remotable, Launchable):
         return len(self._storage)
 
     def __getitem__(self, key: Union[int, Tensor]) -> NestedTensor:
-        return self._storage[key]
+        # return self._storage[key]
+        return self._storage.get(key)
 
     @property
     def capacity(self) -> int:
@@ -116,7 +117,8 @@ class ReplayBuffer(remote.Remotable, Launchable):
         replacement: bool = False
     ) -> Tuple[torch.Tensor, NestedTensor, torch.Tensor]:
         keys, probabilities = self._sampler.sample(num_samples, replacement)
-        values = self._storage[keys]
+        # values = self._storage[keys]
+        values = self._storage.get(keys)
         return torch.from_numpy(keys), values, torch.from_numpy(probabilities)
 
     @remote.remote_method(batch_size=None)

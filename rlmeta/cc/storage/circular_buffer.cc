@@ -56,10 +56,22 @@ void CircularBuffer::LoadData(const py::tuple& src, int64_t cursor,
   next_key_ = next_key;
 }
 
-py::tuple CircularBuffer::BatchedAtImpl(int64_t n, const int64_t* keys) const {
+py::tuple CircularBuffer::BatchedAtImpl(int64_t n, const int64_t* indices,
+                                        int64_t* keys) const {
+  py::tuple values(n);
+  for (int64_t i = 0; i < n; ++i) {
+    const int64_t index = AbsoluteIndex(indices[i]);
+    const auto& cur = data_.at(index);
+    keys[i] = cur.first;
+    values[i] = cur.second;
+  }
+  return values;
+}
+
+py::tuple CircularBuffer::BatchedGetImpl(int64_t n, const int64_t* keys) const {
   py::tuple ret(n);
   for (int64_t i = 0; i < n; ++i) {
-    ret[i] = At(keys[i]);
+    ret[i] = Get(keys[i]);
   }
   return ret;
 }
@@ -100,13 +112,20 @@ void DefineCircularBuffer(py::module& m) {
                               &CircularBuffer::At, py::const_))
       .def("__getitem__", py::overload_cast<const torch::Tensor&>(
                               &CircularBuffer::At, py::const_))
+      .def("reset", &CircularBuffer::Reset)
+      .def("clear", &CircularBuffer::Clear)
+      .def("front", &CircularBuffer::Front)
+      .def("back", &CircularBuffer::Back)
       .def("at", py::overload_cast<int64_t>(&CircularBuffer::At, py::const_))
       .def("at", py::overload_cast<const py::array_t<int64_t>&>(
                      &CircularBuffer::At, py::const_))
       .def("at", py::overload_cast<const torch::Tensor&>(&CircularBuffer::At,
                                                          py::const_))
-      .def("reset", &CircularBuffer::Reset)
-      .def("clear", &CircularBuffer::Clear)
+      .def("get", py::overload_cast<int64_t>(&CircularBuffer::Get, py::const_))
+      .def("get", py::overload_cast<const py::array_t<int64_t>&>(
+                      &CircularBuffer::Get, py::const_))
+      .def("get", py::overload_cast<const torch::Tensor&>(&CircularBuffer::Get,
+                                                          py::const_))
       .def("append", &CircularBuffer::Append)
       .def("extend",
            py::overload_cast<const py::tuple&>(&CircularBuffer::Extend))

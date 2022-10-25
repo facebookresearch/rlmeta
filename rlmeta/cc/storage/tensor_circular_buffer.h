@@ -59,19 +59,54 @@ class TensorCircularBuffer : public CircularBufferBase {
     next_key_ = 0;
   }
 
-  py::object At(int64_t key) const override;
-
-  py::object At(const py::array_t<int64_t>& keys) const override {
-    assert(index.ndim() == 1);
-    return BatchedAtImpl(keys.size(), keys.data());
+  std::pair<int64_t, py::object> At(int64_t index) const override {
+    index = AbsoluteIndex(index);
+    return {keys_.at(index), AtImpl(index)};
   }
 
-  py::object At(const torch::Tensor& keys) const override {
+  std::pair<py::array_t<int64_t>, py::object> At(
+      const py::array_t<int64_t>& indices) const override {
+    assert(indices.ndim() == 1);
+    const int64_t n = indices.size();
+    const std::vector<int64_t> abs_indices = AbsoluteIndices(n, indices.data());
+    py::array_t<int64_t> keys(n);
+    BatchedKeyAtImpl(n, abs_indices.data(), keys.mutable_data());
+    py::object values = BatchedValueAtImpl(n, abs_indices.data());
+    return std::make_pair<py::array_t<int64_t>, py::object>(std::move(keys),
+                                                            std::move(values));
+  }
+
+  std::pair<torch::Tensor, py::object> At(
+      const torch::Tensor& indices) const override {
+    assert(indices.dtype() == torch::kInt64);
+    assert(indices.dim() == 1);
+    const int64_t n = indices.numel();
+    const torch::Tensor indices_contiguous = indices.contiguous();
+    const std::vector<int64_t> abs_indices =
+        AbsoluteIndices(n, indices_contiguous.data_ptr<int64_t>());
+    torch::Tensor keys = torch::empty_like(indices_contiguous);
+    BatchedKeyAtImpl(n, abs_indices.data(), keys.data_ptr<int64_t>());
+    py::object values = BatchedValueAtImpl(n, abs_indices.data());
+    return std::make_pair<torch::Tensor, py::object>(std::move(keys),
+                                                     std::move(values));
+  }
+
+  py::object Get(int64_t key) const override {
+    const auto it = key_to_index_.find(key);
+    return it == key_to_index_.end() ? py::none() : AtImpl(it->second);
+  }
+
+  py::object Get(const py::array_t<int64_t>& keys) const override {
+    assert(index.ndim() == 1);
+    return BatchedGetImpl(keys.size(), keys.data());
+  }
+
+  py::object Get(const torch::Tensor& keys) const override {
     assert(keys.dtype() == torch::kInt64);
     assert(keys.dim() == 1);
     const torch::Tensor keys_contiguous = keys.contiguous();
-    return BatchedAtImpl(keys_contiguous.numel(),
-                         keys_contiguous.data_ptr<int64_t>());
+    return BatchedGetImpl(keys_contiguous.numel(),
+                          keys_contiguous.data_ptr<int64_t>());
   }
 
   std::pair<int64_t, std::optional<int64_t>> Append(
@@ -99,7 +134,15 @@ class TensorCircularBuffer : public CircularBufferBase {
 
   py::object RecoverNested(const std::vector<torch::Tensor>& src) const;
 
-  py::object BatchedAtImpl(int64_t n, const int64_t* keys) const;
+  std::vector<int64_t> AbsoluteIndices(int64_t n, const int64_t* indices) const;
+
+  py::object AtImpl(int64_t index) const;
+
+  void BatchedKeyAtImpl(int64_t n, const int64_t* indices, int64_t* keys) const;
+
+  py::object BatchedValueAtImpl(int64_t n, const int64_t* indices) const;
+
+  py::object BatchedGetImpl(int64_t n, const int64_t* keys) const;
 
   std::pair<int64_t, std::optional<int64_t>> Reserve();
 
