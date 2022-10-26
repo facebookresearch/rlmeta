@@ -51,6 +51,8 @@ add_subdirectory(
 pybind11_add_module(
   _rlmeta_extension
   ${CMAKE_CURRENT_SOURCE_DIR}/cc/nested_utils/nested_utils.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/cc/ops/groupby.cc
+  ${CMAKE_CURRENT_SOURCE_DIR}/cc/ops/ops.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/cc/pybind.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/cc/samplers/prioritized_sampler.cc
   ${CMAKE_CURRENT_SOURCE_DIR}/cc/samplers/sampler.cc
