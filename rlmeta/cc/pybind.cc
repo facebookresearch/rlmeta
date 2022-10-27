@@ -6,6 +6,7 @@
 #include <pybind11/pybind11.h>
 
 #include "rlmeta/cc/nested_utils/nested_utils.h"
+#include "rlmeta/cc/ops/ops.h"
 #include "rlmeta/cc/samplers/prioritized_sampler.h"
 #include "rlmeta/cc/samplers/sampler.h"
 #include "rlmeta/cc/samplers/uniform_sampler.h"
@@ -29,6 +30,8 @@ PYBIND11_MODULE(_rlmeta_extension, m) {
   rlmeta::DefineSampler(m);
   rlmeta::DefineUniformSampler(m);
   rlmeta::DefinePrioritizedSampler(m);
+
+  rlmeta::DefineOps(m);
 }
 
 }  // namespace
