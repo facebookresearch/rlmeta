@@ -17,60 +17,60 @@ namespace {
 
 template <typename T>
 void GroupByImpl(const torch::Tensor& x,
-                 std::vector<std::pair<torch::Tensor, torch::Tensor>>& result) {
+                 std::pair<torch::Tensor, std::vector<torch::Tensor>>& result) {
   assert(x.dim() == 1);
   const torch::Tensor x_contiguous = x.contiguous();
   const int64_t n = x_contiguous.numel();
   const T* x_data = x_contiguous.data_ptr<T>();
-  if (n == 0) {
-    return;
-  }
   std::vector<std::pair<T, int64_t>> data;
   data.reserve(n);
   for (int64_t i = 0; i < n; ++i) {
     data.emplace_back(x_data[i], i);
   }
   std::sort(data.begin(), data.end());
-  result.clear();
-  result.reserve(n);
+  std::vector<T> values;
+  std::vector<torch::Tensor> groups;
   std::vector<int64_t> indices;
-  T key = data[0].first;
-  indices.push_back(data[0].second);
-  for (int i = 1; i < n; ++i) {
-    auto [k, v] = data[i];
-    if (k != key) {
-      result.emplace_back(torch::tensor(key, utils::TorchDataType<T>::value),
-                          utils::AsTorchTensor(std::move(indices)));
-      key = k;
+  if (n > 0) {
+    T key = data[0].first;
+    indices.push_back(data[0].second);
+    for (int i = 1; i < n; ++i) {
+      auto [k, v] = data[i];
+      if (k != key) {
+        values.push_back(key);
+        groups.emplace_back(utils::AsTorchTensor(std::move(indices)));
+        key = k;
+      }
+      indices.push_back(v);
     }
-    indices.push_back(v);
+    if (!indices.empty()) {
+      values.push_back(key);
+      groups.emplace_back(utils::AsTorchTensor(std::move(indices)));
+    }
   }
-  if (!indices.empty()) {
-    result.emplace_back(torch::tensor(key, utils::TorchDataType<T>::value),
-                        utils::AsTorchTensor(std::move(indices)));
-  }
+  result.first = utils::AsTorchTensor(std::move(values));
+  result.second = std::move(groups);
 }
 
 }  // namespace
 
-std::vector<std::pair<torch::Tensor, torch::Tensor>> GroupBy(
+std::pair<torch::Tensor, std::vector<torch::Tensor>> GroupBy(
     const torch::Tensor& x) {
-  std::vector<std::pair<torch::Tensor, torch::Tensor>> ret;
-  AT_DISPATCH_ALL_TYPES_AND(torch::kBool, x.scalar_type(), "GroupBy",
-                            [&]() { GroupByImpl<scalar_t>(x, ret); });
+  std::pair<torch::Tensor, std::vector<torch::Tensor>> ret;
+  AT_DISPATCH_ALL_TYPES(x.scalar_type(), "GroupBy",
+                        [&]() { GroupByImpl<scalar_t>(x, ret); });
   return ret;
 }
 
 void DefineGroupByOp(py::module& m) {
   m.def("groupby", [](const torch::Tensor& x) {
-    std::vector<std::pair<torch::Tensor, torch::Tensor>> vec = GroupBy(x);
-    const int64_t n = vec.size();
-    py::tuple ret(n);
+    auto [values, groups] = GroupBy(x);
+    const int64_t n = groups.size();
+    py::tuple py_groups(n);
     for (int i = 0; i < n; ++i) {
-      ret[i] =
-          py::make_tuple(std::move(vec[i].first), std::move(vec[i].second));
+      py_groups[i] = std::move(groups[i]);
     }
-    return ret;
+    return py::make_tuple(std::move(values), std::move(py_groups));
   });
 }
 

@@ -17,7 +17,7 @@ namespace py = pybind11;
 namespace rlmeta {
 namespace ops {
 
-std::vector<std::pair<torch::Tensor, torch::Tensor>> GroupBy(
+std::pair<torch::Tensor, std::vector<torch::Tensor>> GroupBy(
     const torch::Tensor& x);
 
 void DefineGroupByOp(py::module& m);
