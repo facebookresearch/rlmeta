@@ -39,6 +39,7 @@ class PPORNDAgent(PPOAgent):
         vf_loss_coeff: float = 0.5,
         entropy_coeff: float = 0.01,
         rescale_reward: bool = True,
+        max_abs_reward: float = 10.0,
         normalize_advantage: bool = True,
         learning_starts: Optional[int] = None,
         model_push_period: int = 10,
@@ -50,7 +51,7 @@ class PPORNDAgent(PPOAgent):
                          optimizer, batch_size, max_grad_norm, gamma,
                          gae_lambda, ratio_clipping_eps, value_clipping_eps,
                          vf_loss_coeff, entropy_coeff, rescale_reward,
-                         normalize_advantage, learning_starts,
+                         max_abs_reward, normalize_advantage, learning_starts,
                          model_push_period, local_batch_size)
 
         self._intrinsic_advantage_coeff = intrinsic_advantage_coeff

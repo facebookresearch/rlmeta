@@ -47,6 +47,7 @@ class PPOAgent(Agent):
                  vf_loss_coeff: float = 0.5,
                  entropy_coeff: float = 0.01,
                  rescale_reward: bool = True,
+                 max_abs_reward: float = 10.0,
                  normalize_advantage: bool = True,
                  learning_starts: Optional[int] = None,
                  model_push_period: int = 10,
@@ -70,6 +71,7 @@ class PPOAgent(Agent):
         self._vf_loss_coeff = vf_loss_coeff
         self._entropy_coeff = entropy_coeff
         self._rescale_reward = rescale_reward
+        self._max_abs_reward = max_abs_reward
         self._reward_rescaler = StdRescaler(size=1) if rescale_reward else None
         self._normalize_advantage = normalize_advantage
 
@@ -237,10 +239,14 @@ class PPOAgent(Agent):
         v = torch.zeros(1)
         r = torch.zeros(1)
         for value, reward in zip(reversed(values), reversed(rewards)):
+            if isinstance(reward, float):
+                reward = torch.tensor([reward])
             if reward_rescaler is not None:
                 r = reward + self._gamma * r
                 reward_rescaler.update(r)
-                reward = reward_rescaler.rescale(reward)
+                reward = torch.clamp(reward_rescaler.rescale(reward),
+                                     -self._max_abs_reward,
+                                     self._max_abs_reward)
             delta = reward + self._gamma * v - value
             v = value
             gae = delta + self._gamma * self._gae_lambda * gae
