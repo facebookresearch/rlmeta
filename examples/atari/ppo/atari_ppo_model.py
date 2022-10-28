@@ -36,16 +36,12 @@ class AtariPPOModel(PPOModel):
     def act(
         self, obs: torch.Tensor, deterministic_policy: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        device = next(self.parameters()).device
-
         with torch.no_grad():
-            x = obs.to(device)
-            d = deterministic_policy.to(device)
-            logpi, v = self.forward(x)
-
+            logpi, v = self.forward(obs)
             greedy_action = logpi.argmax(-1, keepdim=True)
             sample_action = logpi.exp().multinomial(1, replacement=True)
-            action = torch.where(d, greedy_action, sample_action)
+            action = torch.where(deterministic_policy, greedy_action,
+                                 sample_action)
             logpi = logpi.gather(dim=-1, index=action)
 
-        return action.cpu(), logpi.cpu(), v.cpu()
+        return action, logpi, v

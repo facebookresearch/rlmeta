@@ -15,7 +15,7 @@ from rlmeta.agents.ppo.ppo_agent import PPOAgent
 from rlmeta.core.controller import ControllerLike
 from rlmeta.core.model import ModelLike
 from rlmeta.core.replay_buffer import ReplayBufferLike
-from rlmeta.core.rescalers import Rescaler, MomentsRescaler, RMSRescaler
+from rlmeta.core.rescalers import StdRescaler
 from rlmeta.core.types import Action, TimeStep
 from rlmeta.core.types import Tensor, NestedTensor
 
@@ -56,9 +56,9 @@ class PPORNDAgent(PPOAgent):
         self._intrinsic_advantage_coeff = intrinsic_advantage_coeff
 
         self._reward_rescaler = None
-        self._ext_reward_rescaler = RMSRescaler(
+        self._ext_reward_rescaler = StdRescaler(
             size=1) if rescale_reward else None
-        self._int_reward_rescaler = RMSRescaler(
+        self._int_reward_rescaler = StdRescaler(
             size=1) if rescale_reward else None
 
         self._collate_fn = torch.stack if collate_fn is None else collate_fn
@@ -173,7 +173,8 @@ class PPORNDAgent(PPOAgent):
         return int_rewards
 
     def _train_step(self, batch: NestedTensor) -> Dict[str, float]:
-        batch = nested_utils.map_nested(lambda x: x.to(self.device()), batch)
+        batch = nested_utils.map_nested(lambda x: x.to(self._model.device),
+                                        batch)
         self._optimizer.zero_grad()
 
         obs = batch["obs"]

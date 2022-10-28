@@ -5,7 +5,8 @@
 
 import time
 
-from typing import Callable, Dict, List, Optional, Sequence
+from concurrent.futures import Future, ThreadPoolExecutor
+from typing import Callable, Dict, List, Optional, Sequence, Union
 
 import torch
 import torch.nn as nn
@@ -87,6 +88,7 @@ class ApexDQNAgent(Agent):
         self._step_counter = 0
         self._trajectory = []
         self._update_priorities_future = None
+        self._eval_executor = None
 
     def reset(self) -> None:
         self._step_counter = 0
@@ -148,8 +150,14 @@ class ApexDQNAgent(Agent):
             for m in self._additional_models_to_update:
                 m.connect()
 
-    def train(self, num_steps: int) -> Optional[StatsDict]:
-        self._controller.set_phase(Phase.TRAIN)
+    def train(self,
+              num_steps: int,
+              keep_evaluation_loops: bool = False) -> StatsDict:
+        phase = self._controller.phase()
+        if keep_evaluation_loops:
+            self._controller.set_phase(Phase.TRAIN | phase)
+        else:
+            self._controller.set_phase(Phase.TRAIN)
 
         self._replay_buffer.warm_up(self._learning_starts)
         stats = StatsDict()
@@ -182,6 +190,10 @@ class ApexDQNAgent(Agent):
                     for m in self._additional_models_to_update:
                         m.push()
 
+        # Release current model to stable.
+        self._model.push()
+        self._model.release()
+
         episode_stats = self._controller.stats(Phase.TRAIN)
         stats.update(episode_stats)
         self._controller.reset_phase(Phase.TRAIN)
@@ -190,16 +202,25 @@ class ApexDQNAgent(Agent):
 
     def eval(self,
              num_episodes: Optional[int] = None,
-             keep_training_loops: bool = False) -> Optional[StatsDict]:
-        if keep_training_loops:
-            self._controller.set_phase(Phase.BOTH)
-        else:
-            self._controller.set_phase(Phase.EVAL)
-        self._controller.reset_phase(Phase.EVAL, limit=num_episodes)
-        while self._controller.count(Phase.EVAL) < num_episodes:
-            time.sleep(1)
-        stats = self._controller.stats(Phase.EVAL)
-        return stats
+             keep_training_loops: bool = False,
+             non_blocking: bool = False) -> Union[StatsDict, Future]:
+        if not non_blocking:
+            return self._eval(num_episodes, keep_training_loops)
+
+        if self._eval_executor is None:
+            self._eval_executor = ThreadPoolExecutor(max_workers=1)
+        return self._eval_executor.submit(self._eval, num_episodes,
+                                          keep_training_loops)
+
+        # if keep_training_loops:
+        #     self._controller.set_phase(Phase.BOTH)
+        # else:
+        #     self._controller.set_phase(Phase.EVAL)
+        # self._controller.reset_phase(Phase.EVAL, limit=num_episodes)
+        # while self._controller.count(Phase.EVAL) < num_episodes:
+        #     time.sleep(1)
+        # stats = self._controller.stats(Phase.EVAL)
+        # return stats
 
     def _make_replay(self) -> Optional[List[NestedTensor]]:
         trajectory_len = len(self._trajectory)
@@ -311,6 +332,23 @@ class ApexDQNAgent(Agent):
         else:
             return self._loss_fn(q, target).mean() if weight is None else (
                 self._loss_fn(q, target) * weight).mean()
+
+    def _eval(self,
+              num_episodes: int,
+              keep_training_loops: bool = False) -> StatsDict:
+        phase = self._controller.phase()
+        if keep_training_loops:
+            self._controller.set_phase(Phase.EVAL | phase)
+        else:
+            self._controller.set_phase(Phase.EVAL)
+        self._controller.reset_phase(Phase.EVAL, limit=num_episodes)
+
+        while self._controller.count(Phase.EVAL) < num_episodes:
+            time.sleep(1)
+        stats = self._controller.stats(Phase.EVAL)
+
+        self._controller.set_phase(phase)
+        return stats
 
 
 class ApexDQNAgentFactory(AgentFactory):

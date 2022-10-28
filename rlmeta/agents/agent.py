@@ -7,7 +7,8 @@ import abc
 import asyncio
 import copy
 
-from typing import Any, Optional, Type
+from concurrent.futures import Future
+from typing import Any, Optional, Type, Union
 
 import rlmeta.core.remote as remote
 import rlmeta.utils.moolib_utils as moolib_utils
@@ -77,10 +78,15 @@ class Agent(abc.ABC):
             if isinstance(obj, remote.Remote):
                 obj.connect()
 
-    def train(self, num_steps: int) -> Optional[StatsDict]:
+    def train(self,
+              num_steps: int,
+              keep_evaluation_loops: bool = False) -> StatsDict:
         pass
 
-    def eval(self, num_episodes: int) -> Optional[StatsDict]:
+    def eval(self,
+             num_episodes: int,
+             keep_training_loops: bool = False,
+             non_blocking: bool = False) -> Union[StatsDict, Future]:
         pass
 
 
