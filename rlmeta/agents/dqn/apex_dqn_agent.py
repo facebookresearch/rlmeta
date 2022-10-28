@@ -212,16 +212,6 @@ class ApexDQNAgent(Agent):
         return self._eval_executor.submit(self._eval, num_episodes,
                                           keep_training_loops)
 
-        # if keep_training_loops:
-        #     self._controller.set_phase(Phase.BOTH)
-        # else:
-        #     self._controller.set_phase(Phase.EVAL)
-        # self._controller.reset_phase(Phase.EVAL, limit=num_episodes)
-        # while self._controller.count(Phase.EVAL) < num_episodes:
-        #     time.sleep(1)
-        # stats = self._controller.stats(Phase.EVAL)
-        # return stats
-
     def _make_replay(self) -> Optional[List[NestedTensor]]:
         trajectory_len = len(self._trajectory)
         if trajectory_len < 2:
