@@ -48,25 +48,19 @@ class AtariPPORNDModel(PPORNDModel):
     def act(
         self, obs: torch.Tensor, deterministic_policy: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
-        device = next(self.parameters()).device
-
         with torch.no_grad():
-            x = obs.to(device)
-            d = deterministic_policy.to(device)
-            logpi, ext_v, int_v = self.forward(x)
-
+            logpi, ext_v, int_v = self.forward(obs)
             greedy_action = logpi.argmax(-1, keepdim=True)
             sample_action = logpi.exp().multinomial(1, replacement=True)
-            action = torch.where(d, greedy_action, sample_action)
+            action = torch.where(deterministic_policy, greedy_action,
+                                 sample_action)
             logpi = logpi.gather(dim=-1, index=action)
 
-        return action.cpu(), logpi.cpu(), ext_v.cpu(), int_v.cpu()
+        return action, logpi, ext_v, int_v
 
     @remote.remote_method(batch_size=None)
     def intrinsic_reward(self, obs: torch.Tensor) -> torch.Tensor:
-        device = next(self.parameters()).device
-        reward = self._rnd_error(obs.to(device))
-        return reward.cpu()
+        return self._rnd_error(obs)
 
     def rnd_loss(self, obs: torch.Tensor) -> torch.Tensor:
         return self._rnd_error(obs).mean() * 0.5

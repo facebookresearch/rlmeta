@@ -67,22 +67,18 @@ class AtariDQNModel(DQNModel):
     @remote.remote_method(batch_size=128)
     def act(self, obs: torch.Tensor,
             eps: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        device = next(self.parameters()).device
-
         with torch.no_grad():
-            x = obs.to(device)
-            eps = eps.to(device)  # size = (batch_size, 1)
-            q = self.online_net(x)  # size = (batch_size, action_dim)
+            q = self.online_net(obs)  # size = (batch_size, action_dim)
             _, action_dim = q.size()
             greedy_action = q.argmax(-1, keepdim=True)
 
             pi = torch.ones_like(q) * (eps / (action_dim - 1))
             pi.scatter_(dim=-1, index=greedy_action, src=1.0 - eps)
             action = pi.multinomial(1, replacement=True)
-            v = self._value(x, q)
+            v = self._value(obs, q)
             q = q.gather(dim=-1, index=action)
 
-        return action.cpu(), q.cpu(), v.cpu()
+        return action, q, v
 
     def td_error(self, obs: NestedTensor, action: torch.Tensor,
                  target: torch.Tensor) -> torch.Tensor:
@@ -92,10 +88,8 @@ class AtariDQNModel(DQNModel):
     @remote.remote_method(batch_size=None)
     def compute_priority(self, obs: NestedTensor, action: torch.Tensor,
                          target: torch.Tensor) -> torch.Tensor:
-        device = next(self.parameters()).device
-        obs = nested_utils.map_nested(lambda x: x.to(device), obs)
-        err = self.td_error(obs, action.to(device), target.to(device))
-        return err.abs().cpu()
+        err = self.td_error(obs, action, target)
+        return err.abs()
 
     def sync_target_net(self) -> None:
         self.target_net.load_state_dict(self.online_net.state_dict())

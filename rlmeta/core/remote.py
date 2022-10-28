@@ -139,17 +139,16 @@ class Remote:
 
     def _bind(self) -> None:
         for method in self._remote_methods:
+            method_name = self.remote_method_name(method)
             self._client_methods[method] = functools.partial(
-                self.client.sync, self.server_name,
-                self.remote_method_name(method))
+                self.client.sync, self.server_name, method_name)
             self._client_methods["async_" + method] = functools.partial(
-                self.client.async_, self.server_name,
-                self.remote_method_name(method))
+                self.client.async_, self.server_name, method_name)
 
 
 def remote_method(batch_size: Optional[int] = None) -> Callable[..., Any]:
 
-    def remote_method_impl(func: Callable[..., Any]):
+    def remote_method_impl(func: Callable[..., Any]) -> Callable[..., Any]:
         setattr(func, "__remote__", True)
         setattr(func, "__batch_size__", batch_size)
         return func

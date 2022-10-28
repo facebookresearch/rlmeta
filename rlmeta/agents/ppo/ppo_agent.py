@@ -5,6 +5,7 @@
 
 import time
 
+from concurrent.futures import Future, ThreadPoolExecutor
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
 
 import torch
@@ -78,7 +79,7 @@ class PPOAgent(Agent):
 
         self._trajectory = []
         self._step_counter = 0
-        self._device = None
+        self._eval_executor = None
 
     def reset(self) -> None:
         self._step_counter = 0
@@ -135,8 +136,14 @@ class PPOAgent(Agent):
             await self._async_send_replay(replay)
         self._trajectory.clear()
 
-    def train(self, num_steps: int) -> Optional[StatsDict]:
-        self._controller.set_phase(Phase.TRAIN)
+    def train(self,
+              num_steps: int,
+              keep_evaluation_loops: bool = False) -> StatsDict:
+        phase = self._controller.phase()
+        if keep_evaluation_loops:
+            self._controller.set_phase(Phase.TRAIN | phase)
+        else:
+            self._controller.set_phase(Phase.TRAIN)
 
         self._replay_buffer.warm_up(self._learning_starts)
         stats = StatsDict()
@@ -159,6 +166,10 @@ class PPOAgent(Agent):
             if self._step_counter % self._model_push_period == 0:
                 self._model.push()
 
+        # Release current model to stable.
+        self._model.push()
+        self._model.release()
+
         episode_stats = self._controller.stats(Phase.TRAIN)
         stats.update(episode_stats)
         self._controller.reset_phase(Phase.TRAIN)
@@ -167,21 +178,15 @@ class PPOAgent(Agent):
 
     def eval(self,
              num_episodes: Optional[int] = None,
-             keep_training_loops: bool = False) -> Optional[StatsDict]:
-        if keep_training_loops:
-            self._controller.set_phase(Phase.BOTH)
-        else:
-            self._controller.set_phase(Phase.EVAL)
-        self._controller.reset_phase(Phase.EVAL, limit=num_episodes)
-        while self._controller.count(Phase.EVAL) < num_episodes:
-            time.sleep(1)
-        stats = self._controller.stats(Phase.EVAL)
-        return stats
+             keep_training_loops: bool = False,
+             non_blocking: bool = False) -> Union[StatsDict, Future]:
+        if not non_blocking:
+            return self._eval(num_episodes, keep_training_loops)
 
-    def device(self) -> torch.device:
-        if self._device is None:
-            self._device = next(self._model.parameters()).device
-        return self._device
+        if self._eval_executor is None:
+            self._eval_executor = ThreadPoolExecutor(max_workers=1)
+        return self._eval_executor.submit(self._eval, num_episodes,
+                                          keep_training_loops)
 
     def _make_replay(self) -> List[NestedTensor]:
         self._trajectory.pop()
@@ -244,7 +249,8 @@ class PPOAgent(Agent):
         return reversed(adv), reversed(ret)
 
     def _train_step(self, batch: NestedTensor) -> Dict[str, float]:
-        batch = nested_utils.map_nested(lambda x: x.to(self.device()), batch)
+        device = self._model.device
+        batch = nested_utils.map_nested(lambda x: x.to(device), batch)
         self._optimizer.zero_grad()
 
         obs = batch["obs"]
@@ -309,3 +315,20 @@ class PPOAgent(Agent):
 
     def _entropy(self, logpi: torch.Tensor) -> torch.Tensor:
         return -(logpi.exp() * logpi).sum(dim=-1).mean()
+
+    def _eval(self,
+              num_episodes: int,
+              keep_training_loops: bool = False) -> StatsDict:
+        phase = self._controller.phase()
+        if keep_training_loops:
+            self._controller.set_phase(Phase.EVAL | phase)
+        else:
+            self._controller.set_phase(Phase.EVAL)
+        self._controller.reset_phase(Phase.EVAL, limit=num_episodes)
+
+        while self._controller.count(Phase.EVAL) < num_episodes:
+            time.sleep(1)
+        stats = self._controller.stats(Phase.EVAL)
+
+        self._controller.set_phase(phase)
+        return stats
