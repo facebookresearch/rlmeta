@@ -137,12 +137,9 @@ class RemotableModelPool(remote.Remotable, Launchable):
             version = torch.where(random_mask, random_version, version)
 
         values, groups = rlmeta_ops.groupby(version)
-        values = values.tolist()
-
         device = self._model.device
         args = nested_utils.map_nested(lambda x: x.to(device), args)
         kwargs = nested_utils.map_nested(lambda x: x.to(device), kwargs)
-        groups = tuple([g.to(device) for g in groups])
 
         if len(values) == 1:
             ret = self._call_single_model(values[0], method, *args, **kwargs)
@@ -150,18 +147,17 @@ class RemotableModelPool(remote.Remotable, Launchable):
             return ret
 
         rets = []
-        for v, g in zip(values, groups):
+        for v, g in zip(values.tolist(), groups):
             cur_args = nested_utils.map_nested(
                 lambda x: self._index_select_data(x, index=g), args)
             cur_kwargs = nested_utils.map_nested(
                 lambda x: self._index_select_data(x, index=g), kwargs)
-            ret = self._call_single_model(v, method, *cur_args, *cur_kwargs)
+            ret = self._call_single_model(v, method, *cur_args, **cur_kwargs)
             rets.append(ret)
         index = torch.cat(groups)
         index = torch.argsort(index)
         ret = data_utils.cat_fields(rets)
-        ret = nested_utils.map_nested(
-            lambda x: x.index_select(dim=0, index=index).cpu(), ret)
+        ret = nested_utils.map_nested(lambda x: x[index, :].cpu(), ret)
 
         return ret
 
@@ -174,7 +170,7 @@ class RemotableModelPool(remote.Remotable, Launchable):
             self, data: Union[torch.Tensor, Sequence[NestedTensor]],
             index: torch.Tensor) -> Union[torch.Tensor, Tuple[NestedTensor]]:
         if isinstance(data, torch.Tensor):
-            return data.index_select(dim=0, index=index)
+            return data[index, :]
         else:
             # For Non-tensor data.
             return tuple([data[i] for i in index.tolist()])
