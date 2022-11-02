@@ -137,6 +137,7 @@ class RemotableModelPool(remote.Remotable, Launchable):
             version = torch.where(random_mask, random_version, version)
 
         values, groups = rlmeta_ops.groupby(version)
+        values = values.tolist()
         device = self._model.device
         args = nested_utils.map_nested(lambda x: x.to(device), args)
         kwargs = nested_utils.map_nested(lambda x: x.to(device), kwargs)
@@ -147,7 +148,7 @@ class RemotableModelPool(remote.Remotable, Launchable):
             return ret
 
         rets = []
-        for v, g in zip(values.tolist(), groups):
+        for v, g in zip(values, groups):
             cur_args = nested_utils.map_nested(
                 lambda x: self._index_select_data(x, index=g), args)
             cur_kwargs = nested_utils.map_nested(
