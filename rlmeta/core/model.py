@@ -7,7 +7,10 @@ import copy
 import functools
 
 from enum import IntEnum
-from typing import Any, Callable, Dict, Optional, Sequence, Tuple, Union
+from typing import (Any, Awaitable, Callable, Dict, Optional, Sequence, Tuple,
+                    Union)
+
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -25,11 +28,10 @@ from rlmeta.storage.circular_buffer import CircularBuffer
 
 
 class ModelVersion(IntEnum):
-    # Use negative values for special version flag to avoid conflict with real
+    # Use negative values for latest version flag to avoid conflict with real
     # version.
-    LATEST = -1
-    STABLE = -2
-    RANDOM = -3
+    LATEST = -0x7FFFFFFF
+    STABLE = -1
 
 
 class RemotableModel(nn.Module, remote.Remotable):
@@ -47,14 +49,15 @@ class RemotableModelPool(remote.Remotable, Launchable):
 
     def __init__(self,
                  model: RemotableModel,
-                 capacity: int = 1,
+                 capacity: int = 0,
                  identifier: Optional[str] = None) -> None:
         super().__init__(identifier)
 
         self._model = model
         self._capacity = capacity
-        self._history = CircularBuffer(self._capacity)
-        self._sampler = UniformSampler()
+
+        if self._capacity > 0:
+            self._history = CircularBuffer(self._capacity)
 
     @property
     def capacity(self) -> int:
@@ -67,12 +70,8 @@ class RemotableModelPool(remote.Remotable, Launchable):
         self._bind()
 
     def model(self, version: int = ModelVersion.LATEST) -> nn.Module:
-        if version == ModelVersion.LATEST:
-            return self._model
-        elif version == ModelVersion.STABLE:
-            return self._history.back()[1]
-        else:
-            return self._history.get(version)
+        return self._model if version == ModelVersion.LATEST else self._history[
+            version][1]
 
     @remote.remote_method(batch_size=None)
     def pull(self,
@@ -91,90 +90,62 @@ class RemotableModelPool(remote.Remotable, Launchable):
 
     @remote.remote_method(batch_size=None)
     def release(self) -> None:
-        new_key, old_key = self._history.append(copy.deepcopy(self._model))
-        self._sampler.insert(new_key, 1.0)
-        if old_key is not None:
-            self._sampler.delete(old_key)
+        if self._capacity > 0:
+            self._history.append(copy.deepcopy(self._model))
 
     @remote.remote_method(batch_size=None)
-    def sample_model(self,
-                     num_samples: int = 1,
-                     replacement: bool = False) -> torch.Tensor:
-        ret, _ = self._sampler.sample(num_samples, replacement)
-        return torch.from_numpy(ret)
+    def sample_model(self) -> int:
+        if self._capacity == 0:
+            return ModelVersion.LATEST
+        else:
+            return np.random.randint(len(self._history))
 
     def _bind(self) -> None:
         for method in self._model.remote_methods:
-            self.__remote_methods__.append(method)
             batch_size = getattr(getattr(self._model, method), "__batch_size__",
                                  None)
-            setattr(self, method, self._wrap_remote_method(method, batch_size))
+            method_name, method_impl = self._wrap_remote_method(
+                method, batch_size)
+            self.__remote_methods__.append(method_name)
+            setattr(self, method_name, method_impl)
+            for i in range(self._capacity):
+                method_name, method_impl = self._wrap_remote_method(
+                    method, batch_size, i)
+                self.__remote_methods__.append(method_name)
+                setattr(self, method_name, method_impl)
+                method_name, method_impl = self._wrap_remote_method(
+                    method, batch_size, -i - 1)
+                setattr(self, method_name, method_impl)
+                self.__remote_methods__.append(method_name)
 
     def _wrap_remote_method(
             self,
             method: str,
-            batch_size: Optional[int] = None) -> Callable[..., Any]:
+            batch_size: Optional[int] = None,
+            version: int = ModelVersion.LATEST) -> Callable[..., Any]:
 
-        def wrapped_method(version: torch.Tensor, *args, **kwargs) -> Any:
-            return self._dispatch_method_by_version(version, method, *args,
-                                                    **kwargs)
+        method_name = method
+        if version != ModelVersion.LATEST:
+            method_name += f"[{version}]"
 
-        setattr(wrapped_method, "__remote__", True)
+        method_impl = functools.partial(self._dispatch_model_call, version,
+                                        method)
+
+        setattr(method_impl, "__remote__", True)
         if batch_size is not None:
-            setattr(wrapped_method, "__batch_size__", batch_size)
+            setattr(method_impl, "__batch_size__", batch_size)
 
-        return wrapped_method
+        return method_name, method_impl
 
-    def _dispatch_method_by_version(self, version: torch.Tensor, method: str,
-                                    *args, **kwargs) -> Any:
-        version = version.view(-1)
-        batch_size = version.numel()
-        random_mask = (version == ModelVersion.RANDOM)
-        if random_mask.any():
-            random_version, _ = self._sampler.sample(batch_size,
-                                                     replacement=True)
-            random_version = torch.from_numpy(random_version)
-            version = torch.where(random_mask, random_version, version)
-
-        values, groups = rlmeta_ops.groupby(version)
-        values = values.tolist()
-        device = self._model.device
+    def _dispatch_model_call(self, version: int, method: str, *args,
+                             **kwargs) -> Any:
+        model = self.model(version)
+        device = model.device
         args = nested_utils.map_nested(lambda x: x.to(device), args)
         kwargs = nested_utils.map_nested(lambda x: x.to(device), kwargs)
-
-        if len(values) == 1:
-            ret = self._call_single_model(values[0], method, *args, **kwargs)
-            ret = nested_utils.map_nested(lambda x: x.cpu(), ret)
-            return ret
-
-        rets = []
-        for v, g in zip(values, groups):
-            cur_args = nested_utils.map_nested(
-                lambda x: self._index_select_data(x, index=g), args)
-            cur_kwargs = nested_utils.map_nested(
-                lambda x: self._index_select_data(x, index=g), kwargs)
-            ret = self._call_single_model(v, method, *cur_args, **cur_kwargs)
-            rets.append(ret)
-        index = torch.cat(groups)
-        index = torch.argsort(index)
-        ret = data_utils.cat_fields(rets)
-        ret = nested_utils.map_nested(lambda x: x[index, :].cpu(), ret)
-
+        ret = getattr(model, method)(*args, **kwargs)
+        ret = nested_utils.map_nested(lambda x: x.cpu(), ret)
         return ret
-
-    def _call_single_model(self, version: int, method: str, *args,
-                           **kwargs) -> Any:
-        model = self.model(version)
-        return getattr(model, method)(*args, **kwargs)
-
-    def _index_select_data(
-            self, data: Union[torch.Tensor, Sequence[NestedTensor]],
-            index: torch.Tensor) -> Union[torch.Tensor, Tuple[NestedTensor]]:
-        if isinstance(data, torch.Tensor):
-            return data[index, :]
-        else:
-            # For Non-tensor data.
-            return tuple([data[i] for i in index.tolist()])
 
 
 class RemoteModel(remote.Remote):
@@ -186,19 +157,16 @@ class RemoteModel(remote.Remote):
                  name: Optional[str] = None,
                  version: int = ModelVersion.LATEST,
                  timeout: float = 60) -> None:
-        # Define self._version before self._bind in __init__.
-        self._version = torch.tensor([version])
         super().__init__(target, server_name, server_addr, name, timeout)
+        self._version = version
 
     @property
     def version(self) -> int:
-        return self._version.item()
+        return self._version
 
     @version.setter
     def version(self, version: int) -> None:
-        self._version = torch.tensor([version])
-        # Bind _remote_methods again for new version.
-        self._bind()
+        self._version = version
 
     def sample_model(self,
                      num_samples: int = 1,
@@ -217,12 +185,24 @@ class RemoteModel(remote.Remote):
     def _bind(self) -> None:
         for method in self._remote_methods:
             method_name = self.remote_method_name(method)
-
             self._client_methods[method] = functools.partial(
-                self.client.sync, self.server_name, method_name, self._version)
+                self._remote_model_call, method_name)
             self._client_methods["async_" + method] = functools.partial(
-                self.client.async_, self.server_name, method_name,
-                self._version)
+                self._async_remote_model_call, method_name)
+
+    def _remote_model_call(self, method: str, *args, **kwargs) -> Any:
+        method_name = method
+        if self._version != ModelVersion.LATEST:
+            method_name += f"[{self._version}]"
+        return self.client.sync(self.server_name, method_name, *args, **kwargs)
+
+    def _async_remote_model_call(self, method: str, *args,
+                                 **kwargs) -> Awaitable:
+        method_name = method
+        if self._version != ModelVersion.LATEST:
+            method_name += f"[{self._version}]"
+        return self.client.async_(self.server_name, method_name, *args,
+                                  **kwargs)
 
 
 class DownstreamModel(remote.Remote):
