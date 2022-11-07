@@ -36,7 +36,8 @@ class RunningRMSTest(TestCaseBase):
         self._verify_running_rms(input)
 
     def _verify_running_rms(self, input: torch.Tensor) -> None:
-        self.assertEqual(self.running_rms.count(), self.outer_size)
+        self.assert_tensor_equal(self.running_rms.count(),
+                                 torch.tensor([self.outer_size]))
         self.assert_tensor_close(self.running_rms.mean_square(),
                                  input.square().mean(dim=0),
                                  rtol=self.rtol,
@@ -76,7 +77,8 @@ class RunningMomentsTest(TestCaseBase):
         self._verify_running_moments(input)
 
     def _verify_running_moments(self, input: torch.Tensor) -> None:
-        self.assertEqual(self.running_moments.count(), self.outer_size)
+        self.assert_tensor_equal(self.running_moments.count(),
+                                 torch.tensor([self.outer_size]))
         self.assert_tensor_close(self.running_moments.mean(),
                                  input.mean(dim=0),
                                  rtol=self.rtol,
