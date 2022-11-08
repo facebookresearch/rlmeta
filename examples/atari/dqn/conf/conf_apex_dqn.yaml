@@ -27,17 +27,18 @@ priority_exponent: 0.6
 prefetch: 2
 
 importance_sampling_exponent: 0.4
-max_abs_reward: 1.0
 
-target_sync_period: 2500
+max_abs_reward: 1
+rescale_value: False
+value_clipping_eps: 0.2
+
+double_dqn: False
+target_sync_period: null
 
 batch_size: 512
 n_step: 3
 learning_starts: 65536
 model_push_period: 10
-
-loss:
-  name: "huber_loss"
 
 optimizer:
   name: "Adam"

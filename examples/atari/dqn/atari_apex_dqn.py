@@ -28,7 +28,6 @@ from rlmeta.core.replay_buffer import ReplayBuffer, make_remote_replay_buffer
 from rlmeta.core.server import Server, ServerList
 from rlmeta.samplers import PrioritizedSampler
 from rlmeta.storage import TensorCircularBuffer
-from rlmeta.utils.loss_utils import get_loss
 from rlmeta.utils.optimizer_utils import get_optimizer
 
 
@@ -37,9 +36,9 @@ def main(cfg):
     logging.info(hydra_utils.config_to_json(cfg))
 
     env = atari_wrappers.make_atari(cfg.env)
-    train_model = AtariDQNModel(env.action_space.n).to(cfg.train_device)
+    train_model = AtariDQNModel(env.action_space.n,
+                                double_dqn=cfg.double_dqn).to(cfg.train_device)
     infer_model = copy.deepcopy(train_model).to(cfg.infer_device)
-    loss = get_loss(cfg.loss.name)
     optimizer = get_optimizer(cfg.optimizer.name, train_model.parameters(),
                               cfg.optimizer.args)
 
@@ -84,14 +83,12 @@ def main(cfg):
         a_model,
         replay_buffer=a_rb,
         controller=a_ctrl,
-        loss_fn=loss,
         optimizer=optimizer,
         batch_size=cfg.batch_size,
         n_step=cfg.n_step,
         importance_sampling_exponent=cfg.importance_sampling_exponent,
-        max_abs_reward=cfg.max_abs_reward,
         target_sync_period=cfg.target_sync_period,
-        learning_starts=cfg.get("learning_starts", None),
+        learning_starts=cfg.learning_starts,
         model_push_period=cfg.model_push_period)
     t_agent_fac = ApexDQNAgentFactory(t_model,
                                       FlexibleEpsFunc(cfg.train_eps,
@@ -99,7 +96,7 @@ def main(cfg):
                                       replay_buffer=t_rb,
                                       n_step=cfg.n_step,
                                       max_abs_reward=cfg.max_abs_reward,
-                                      rescale_reward=False)
+                                      rescale_value=cfg.rescale_value)
     e_agent_fac = ApexDQNAgentFactory(e_model, ConstantEpsFunc(cfg.eval_eps))
 
     t_loop = ParallelLoop(t_env_fac,
