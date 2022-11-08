@@ -5,7 +5,7 @@
 
 import abc
 
-from typing import Tuple, Union
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -161,6 +161,10 @@ class StdRescaler(Rescaler):
 
 
 class SqrtRescaler(Rescaler):
+    """
+    Introduced by R2D2 paper.
+    https://openreview.net/pdf?id=r1lyTjAqYX
+    """
 
     def __init__(self, eps: float = 1e-3) -> None:
         super().__init__()

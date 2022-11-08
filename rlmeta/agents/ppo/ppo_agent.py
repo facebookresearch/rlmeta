@@ -237,16 +237,15 @@ class PPOAgent(Agent):
         ret = []
         gae = torch.zeros(1)
         v = torch.zeros(1)
-        r = torch.zeros(1)
+        g = torch.zeros(1)
         for value, reward in zip(reversed(values), reversed(rewards)):
             if isinstance(reward, float):
                 reward = torch.tensor([reward])
             if reward_rescaler is not None:
-                r = reward + self._gamma * r
-                reward_rescaler.update(r)
-                reward = torch.clamp(reward_rescaler.rescale(reward),
-                                     -self._max_abs_reward,
-                                     self._max_abs_reward)
+                g = reward + self._gamma * g
+                reward_rescaler.update(g)
+                reward = reward_rescaler.rescale(reward)
+                reward.clamp_(-self._max_abs_reward, self._max_abs_reward)
             delta = reward + self._gamma * v - value
             v = value
             gae = delta + self._gamma * self._gae_lambda * gae

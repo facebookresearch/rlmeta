@@ -37,7 +37,6 @@ class ApexDQNAgent(Agent):
         eps: float = 0.1,
         replay_buffer: Optional[ReplayBufferLike] = None,
         controller: Optional[ControllerLike] = None,
-        loss_fn: Optional[nn.Module] = None,
         optimizer: Optional[torch.optim.Optimizer] = None,
         batch_size: int = 512,
         max_grad_norm: float = 40.0,
@@ -45,8 +44,9 @@ class ApexDQNAgent(Agent):
         gamma: float = 0.99,
         importance_sampling_exponent: float = 0.4,
         max_abs_reward: Optional[int] = None,
-        target_sync_period: int = 2500,
-        rescale_reward: bool = True,
+        rescale_value: bool = False,
+        value_clipping_eps: Optional[float] = 0.2,
+        target_sync_period: Optional[int] = None,
         learning_starts: Optional[int] = None,
         model_push_period: int = 10,
         local_batch_size: int = 1024,
@@ -62,7 +62,6 @@ class ApexDQNAgent(Agent):
         self._replay_buffer = replay_buffer
         self._controller = controller
 
-        self._loss_fn = loss_fn
         self._optimizer = optimizer
         self._batch_size = batch_size
         self._max_grad_norm = max_grad_norm
@@ -72,11 +71,12 @@ class ApexDQNAgent(Agent):
         self._gamma_pow = tuple(gamma**i for i in range(n_step + 1))
         self._importance_sampling_exponent = importance_sampling_exponent
         self._max_abs_reward = max_abs_reward
+        self._value_clipping_eps = value_clipping_eps
+
+        self._rescale_value = rescale_value
+        self._rescaler = SqrtRescaler() if rescale_value else None
 
         self._target_sync_period = target_sync_period
-        self._rescale_reward = rescale_reward
-        self._reward_rescaler = SqrtRescaler() if rescale_reward else None
-
         self._learning_starts = learning_starts
         self._model_push_period = model_push_period
 
@@ -121,7 +121,7 @@ class ApexDQNAgent(Agent):
         obs, reward, done, _ = next_timestep
         reward = torch.tensor([reward])
         if self._max_abs_reward is not None:
-            reward = reward.clamp(-self._max_abs_reward, self._max_abs_reward)
+            reward.clamp_(-self._max_abs_reward, self._max_abs_reward)
 
         cur = self._trajectory[-1]
         cur["reward"] = reward
@@ -178,7 +178,8 @@ class ApexDQNAgent(Agent):
             stats.extend(time_stats)
 
             self._step_counter += 1
-            if self._step_counter % self._target_sync_period == 0:
+            if (self._target_sync_period is not None and
+                    self._step_counter % self._target_sync_period == 0):
                 self._model.sync_target_net()
                 if self._additional_models_to_update is not None:
                     for m in self._additional_models_to_update:
@@ -218,23 +219,32 @@ class ApexDQNAgent(Agent):
             return None
 
         replay = []
-        for i in range(0, trajectory_len - 1):
+        r = torch.zeros(1)
+        for i in range(trajectory_len - 2, -1, -1):
             k = min(self._n_step, trajectory_len - 1 - i)
             cur = self._trajectory[i]
             nxt = self._trajectory[i + k]
             obs = cur["obs"]
             act = cur["action"]
             q = cur["q"]
-            v = torch.zeros(1) if nxt["done"] else nxt["v"]
-            if self._reward_rescaler is not None:
-                v = self._reward_rescaler.recover(v)
-            target = self._gamma_pow[k] * v
-            for j in range(k):
-                target += self._gamma_pow[j] * self._trajectory[i + j]["reward"]
-            if self._reward_rescaler is not None:
-                target = self._reward_rescaler.rescale(target)
+            reward = cur["reward"]
+            done = nxt["done"]
+            v = torch.zeros(1) if done else nxt["v"]
+
+            if self._rescaler is not None:
+                v = self._rescaler.recover(v)
+
+            gamma = torch.zeros(1) if done else torch.tensor(
+                [self._gamma_pow[k]])
+            r = reward + self._gamma * r - gamma * nxt.get("reward", 0.0)
+            target = r + gamma * v
+
+            if self._rescaler is not None:
+                target = self._rescaler.rescale(target)
+
             replay.append({"obs": obs, "action": act, "q": q, "target": target})
 
+        replay.reverse()
         return replay
 
     def _send_replay(self, replay: List[NestedTensor]) -> None:
@@ -280,22 +290,22 @@ class ApexDQNAgent(Agent):
         obs = batch["obs"]
         action = batch["action"]
         target = batch["target"]
+        behavior_q = batch["q"]
 
-        q = self._model.q(obs, action)
-        probabilities = probabilities.to(dtype=q.dtype, device=device)
+        probabilities = probabilities.to(dtype=target.dtype, device=device)
         weight = probabilities.pow(-self._importance_sampling_exponent)
         weight.div_(weight.max())
 
-        loss = self._loss(target, q, weight)
+        q = self._model.q(obs, action)
+        loss = self._loss(target, q, behavior_q, weight)
         loss.backward()
         grad_norm = torch.nn.utils.clip_grad_norm_(self._model.parameters(),
                                                    self._max_grad_norm)
         self._optimizer.step()
 
         with torch.no_grad():
-            q = self._model.q(obs, action)
-        td_err = (target - q).squeeze(-1)
-        priorities = td_err.detach().abs().cpu()
+            td_err = self._model.td_error(obs, action, target)
+        priorities = td_err.detach().squeeze(-1).abs().cpu()
 
         # Wait for previous update request
         if self._update_priorities_future is not None:
@@ -307,21 +317,24 @@ class ApexDQNAgent(Agent):
             keys, priorities)
 
         return {
-            "td_err": td_err.detach().mean().item(),
+            "td_error": td_err.detach().mean().item(),
             "loss": loss.detach().mean().item(),
             "grad_norm": grad_norm.detach().mean().item(),
         }
 
-    def _loss(self,
-              target: torch.Tensor,
-              q: torch.Tensor,
-              weight: Optional[torch.Tensor] = None) -> torch.Tensor:
-        if self._loss_fn is None:
-            return F.mse_loss(q, target) if weight is None else (
-                F.mse_loss(q, target, reduction="none") * weight).mean()
-        else:
-            return self._loss_fn(q, target).mean() if weight is None else (
-                self._loss_fn(q, target) * weight).mean()
+    def _loss(self, target: torch.Tensor, q: torch.Tensor,
+              behavior_q: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+        if self._value_clipping_eps is None:
+            return (F.mse_loss(q, target, reduction="none").squeeze(-1) *
+                    weight).mean()
+
+        # Apply approximate trust region value update.
+        # https://arxiv.org/pdf/2209.07550.pdf
+        clipped_q = behavior_q + torch.clamp(
+            q - behavior_q, -self._value_clipping_eps, self._value_clipping_eps)
+        err1 = F.mse_loss(q, target, reduction="none")
+        err2 = F.mse_loss(clipped_q, target, reduction="none")
+        return (torch.max(err1, err2).squeeze(-1) * weight).mean()
 
     def _eval(self,
               num_episodes: int,
@@ -348,7 +361,6 @@ class ApexDQNAgentFactory(AgentFactory):
         model: ModelLike,
         eps_func: Callable[[int], float],
         replay_buffer: Optional[ReplayBufferLike] = None,
-        loss_fn: Optional[nn.Module] = None,
         controller: Optional[ControllerLike] = None,
         optimizer: Optional[torch.optim.Optimizer] = None,
         batch_size: int = 512,
@@ -357,8 +369,9 @@ class ApexDQNAgentFactory(AgentFactory):
         gamma: float = 0.99,
         importance_sampling_exponent: float = 0.4,
         max_abs_reward: Optional[int] = None,
-        target_sync_period: int = 2500,
-        rescale_reward: bool = True,
+        rescale_value: bool = False,
+        value_clipping_eps: Optional[float] = 0.2,
+        target_sync_period: Optional[int] = None,
         learning_starts: Optional[int] = None,
         model_push_period: int = 10,
         local_batch_size: int = 1024,
@@ -370,7 +383,6 @@ class ApexDQNAgentFactory(AgentFactory):
         self._eps_func = eps_func
         self._replay_buffer = replay_buffer
         self._controller = controller
-        self._loss_fn = loss_fn
         self._optimizer = optimizer
         self._batch_size = batch_size
         self._max_grad_norm = max_grad_norm
@@ -378,8 +390,9 @@ class ApexDQNAgentFactory(AgentFactory):
         self._gamma = gamma
         self._importance_sampling_exponent = importance_sampling_exponent
         self._max_abs_reward = max_abs_reward
+        self._rescale_value = rescale_value
+        self._value_clipping_eps = value_clipping_eps
         self._target_sync_period = target_sync_period
-        self._rescale_reward = rescale_reward
         self._learning_starts = learning_starts
         self._model_push_period = model_push_period
         self._local_batch_size = local_batch_size
@@ -396,7 +409,6 @@ class ApexDQNAgentFactory(AgentFactory):
             eps,
             replay_buffer,
             controller,
-            self._loss_fn,
             self._optimizer,
             self._batch_size,
             self._max_grad_norm,
@@ -404,8 +416,9 @@ class ApexDQNAgentFactory(AgentFactory):
             self._gamma,
             self._importance_sampling_exponent,
             self._max_abs_reward,
+            self._rescale_value,
+            self._value_clipping_eps,
             self._target_sync_period,
-            self._rescale_reward,
             self._learning_starts,
             self._model_push_period,
             self._local_batch_size,
