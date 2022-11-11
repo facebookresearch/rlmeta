@@ -123,9 +123,6 @@ class ApexDQNAgent(Agent):
             return
         act, info = action
         obs, reward, terminated, truncated, _ = next_timestep
-        reward = torch.tensor([reward])
-        if self._max_abs_reward is not None:
-            reward.clamp_(-self._max_abs_reward, self._max_abs_reward)
 
         cur = self._trajectory[-1]
         cur["reward"] = reward
@@ -255,14 +252,22 @@ class ApexDQNAgent(Agent):
             obs = cur["obs"]
             act = cur["action"]
             q = cur["q"]
-            reward = cur["reward"]
+            cur_reward = cur["reward"]
             nxt_reward = nxt["reward"]
             nxt_v = nxt["v"]
+
+            if isinstance(cur_reward, float):
+                cur_reward = torch.tensor([cur_reward])
+            if isinstance(nxt_reward, float):
+                nxt_reward = torch.tensor([nxt_reward])
+            if self._max_abs_reward is not None:
+                cur_reward.clamp_(-self._max_abs_reward, self._max_abs_reward)
+                nxt_reward.clamp_(-self._max_abs_reward, self._max_abs_reward)
 
             if self._rescaler is not None:
                 nxt_v = self._rescaler.recover(nxt_v)
             gamma = self._gamma_pow[k]
-            r = reward + self._gamma * r - gamma * nxt_reward
+            r = cur_reward + self._gamma * r - gamma * nxt_reward
             target = r + gamma * nxt_v
             if self._rescaler is not None:
                 target = self._rescaler.rescale(target)
