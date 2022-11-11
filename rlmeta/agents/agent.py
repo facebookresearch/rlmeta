@@ -78,6 +78,12 @@ class Agent(abc.ABC):
         Async version of observe function for action and next timestep.
         """
 
+    def update(self) -> None:
+        """
+        Update function after each step.
+        """
+        pass
+
     @abc.abstractmethod
     async def async_update(self) -> None:
         """
