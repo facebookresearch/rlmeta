@@ -107,18 +107,22 @@ class ApexDQNAgent(Agent):
         if self._replay_buffer is None:
             return
 
-        obs, _, done, _ = timestep
-        if done:
+        obs, _, terminated, truncated, _ = timestep
+        if terminated or truncated:
             self._trajectory.clear()
         else:
-            self._trajectory = [{"obs": obs, "done": done}]
+            self._trajectory = [{
+                "obs": obs,
+                "terminated": terminated,
+                "truncated": truncated,
+            }]
 
     async def async_observe(self, action: Action,
                             next_timestep: TimeStep) -> None:
         if self._replay_buffer is None:
             return
         act, info = action
-        obs, reward, done, _ = next_timestep
+        obs, reward, terminated, truncated, _ = next_timestep
         reward = torch.tensor([reward])
         if self._max_abs_reward is not None:
             reward.clamp_(-self._max_abs_reward, self._max_abs_reward)
@@ -128,18 +132,43 @@ class ApexDQNAgent(Agent):
         cur["action"] = act
         cur["q"] = info["q"]
         cur["v"] = info["v"]
-        self._trajectory.append({"obs": obs, "done": done})
+        self._trajectory.append({
+            "obs": obs,
+            "terminated": terminated,
+            "truncated": truncated,
+        })
 
     def update(self) -> None:
-        if self._replay_buffer is None or not self._trajectory[-1]["done"]:
+        if not self._trajectory:
             return
+        last_step = self._trajectory[-1]
+        done = last_step["terminated"] or last_step["truncated"]
+        if self._replay_buffer is None or not done:
+            return
+        last_step["reward"] = 0.0
+        last_v = torch.zeros(1)
+        if last_step["truncated"]:
+            # TODO: Find a better way to compute last_v.
+            _, _, last_v = self._model.act(last_step["obs"], self._eps)
+        last_step["v"] = last_v
         replay = self._make_replay()
         self._send_replay(replay)
         self._trajectory.clear()
 
     async def async_update(self) -> None:
-        if self._replay_buffer is None or not self._trajectory[-1]["done"]:
+        if not self._trajectory:
             return
+        last_step = self._trajectory[-1]
+        done = last_step["terminated"] or last_step["truncated"]
+        if self._replay_buffer is None or not done:
+            return
+        last_step["reward"] = 0.0
+        last_v = torch.zeros(1)
+        if last_step["truncated"]:
+            # TODO: Find a better way to compute last_v.
+            _, _, last_v = await self._model.async_act(last_step["obs"],
+                                                       self._eps)
+        last_step["v"] = last_v
         replay = self._make_replay()
         await self._async_send_replay(replay)
         self._trajectory.clear()
@@ -213,38 +242,33 @@ class ApexDQNAgent(Agent):
         return self._eval_executor.submit(self._eval, num_episodes,
                                           keep_training_loops)
 
-    def _make_replay(self) -> Optional[List[NestedTensor]]:
-        trajectory_len = len(self._trajectory)
-        if trajectory_len < 2:
-            return None
-
+    def _make_replay(self) -> List[NestedTensor]:
         replay = []
+
+        n = len(self._trajectory)
         r = torch.zeros(1)
-        for i in range(trajectory_len - 2, -1, -1):
-            k = min(self._n_step, trajectory_len - 1 - i)
+        for i in range(n - 2, -1, -1):
+            k = min(self._n_step, n - 1 - i)
             cur = self._trajectory[i]
             nxt = self._trajectory[i + k]
+
             obs = cur["obs"]
             act = cur["action"]
             q = cur["q"]
             reward = cur["reward"]
-            done = nxt["done"]
-            v = torch.zeros(1) if done else nxt["v"]
+            nxt_reward = nxt["reward"]
+            nxt_v = nxt["v"]
 
             if self._rescaler is not None:
-                v = self._rescaler.recover(v)
-
-            gamma = torch.zeros(1) if done else torch.tensor(
-                [self._gamma_pow[k]])
-            r = reward + self._gamma * r - gamma * nxt.get("reward", 0.0)
-            target = r + gamma * v
-
+                nxt_v = self._rescaler.recover(nxt_v)
+            gamma = self._gamma_pow[k]
+            r = reward + self._gamma * r - gamma * nxt_reward
+            target = r + gamma * nxt_v
             if self._rescaler is not None:
                 target = self._rescaler.rescale(target)
 
             replay.append({"obs": obs, "action": act, "q": q, "target": target})
 
-        replay.reverse()
         return replay
 
     def _send_replay(self, replay: List[NestedTensor]) -> None:

@@ -182,9 +182,20 @@ class AsyncLoop(Loop, Launchable):
     # The method _run_episode is adapted from Acme's Enviroment.run_episode:
     # https://github.com/deepmind/acme/blob/df961057bcd2e1436d5f894ebced62d694225034/acme/environment_loop.py#L76
     #
-    # It was released under the Apache License, Version 2.0 (the "License"),
-    # available at:
-    # http://www.apache.org/licenses/LICENSE-2.0
+    # Copyright 2018 DeepMind Technologies Limited. All rights reserved.
+    #
+    # Licensed under the Apache License, Version 2.0 (the "License");
+    # you may not use this file except in compliance with the License.
+    # You may obtain a copy of the License at
+    #
+    #     http://www.apache.org/licenses/LICENSE-2.0
+    #
+    # Unless required by applicable law or agreed to in writing, software
+    # distributed under the License is distributed on an "AS IS" BASIS,
+    # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+    # See the License for the specific language governing permissions and
+    # limitations under the License.
+
     async def _run_episode(
         self,
         index: int,
@@ -205,7 +216,7 @@ class AsyncLoop(Loop, Launchable):
         if episode_callbacks is not None:
             episode_callbacks.on_episode_init(index, timestep)
 
-        while not timestep.done:
+        while not timestep.terminated and not timestep.truncated:
             if not self.running:
                 return None
             action = await agent.async_act(timestep)

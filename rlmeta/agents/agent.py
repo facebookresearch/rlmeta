@@ -17,6 +17,24 @@ from rlmeta.core.types import Action, TimeStep
 from rlmeta.core.types import NestedTensor
 from rlmeta.utils.stats_dict import StatsDict
 
+# Agent class is adapted from Acme's Agent API design.
+# The async_ APIs are added to be used in our AsyncLoops.
+# https://github.com/deepmind/acme/blob/6cf4f656762d71f5a903cba39fc96d7e3bfa3672/acme/agents/agent.py
+
+# Copyright 2018 DeepMind Technologies Limited. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 
 class Agent(abc.ABC):
 
@@ -27,7 +45,7 @@ class Agent(abc.ABC):
         """
         Act function.
         """
-        return asyncio.run(self.async_act(timestep))
+        pass
 
     @abc.abstractmethod
     async def async_act(self, timestep: TimeStep) -> Action:
@@ -39,7 +57,7 @@ class Agent(abc.ABC):
         """
         Observe function for initial timestep from Env.
         """
-        asyncio.run(self.async_observe_init(timestep))
+        pass
 
     @abc.abstractmethod
     async def async_observe_init(self, timestep: TimeStep) -> None:
@@ -51,7 +69,7 @@ class Agent(abc.ABC):
         """
         Observe function for action and next timestep.
         """
-        asyncio.run(self.async_observe(action, next_timestep))
+        pass
 
     @abc.abstractmethod
     async def async_observe(self, action: Action,
@@ -59,12 +77,6 @@ class Agent(abc.ABC):
         """
         Async version of observe function for action and next timestep.
         """
-
-    def update(self) -> None:
-        """
-        Update function after each step.
-        """
-        asyncio.run(self.async_update())
 
     @abc.abstractmethod
     async def async_update(self) -> None:

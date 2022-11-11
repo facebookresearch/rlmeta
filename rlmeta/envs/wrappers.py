@@ -11,9 +11,21 @@ from rlmeta.core.types import Tensor, NestedTensor
 from rlmeta.core.types import Action, TimeStep
 from rlmeta.envs.env import Env
 
-
 # Simiar as TimeLimit in OpenAI baselines.
-# https://github.com/openai/baselines/blob/master/baselines/common/wrappers.py
+# https://github.com/openai/baselines/blob/ea25b9e8b234e6ee1bca43083f8f3cf974143998/baselines/common/wrappers.py#L3
+#
+# It is under MIT license
+#
+# Copyright (c) 2017 OpenAI (http://openai.com)
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+
 class TimeLimitWrapper(Env):
 
     def __init__(self, env: Env, max_episode_steps: int) -> None:
@@ -35,11 +47,11 @@ class TimeLimitWrapper(Env):
         return self._env.reset(*args, **kwargs)
 
     def step(self, action: Action) -> TimeStep:
-        obs, reward, done, info = self._env.step(action)
+        obs, reward, terminated, truncated, info = self._env.step(action)
         self._elapsed_steps += 1
         if self._elapsed_steps >= self._max_episode_steps:
-            done = True
-        return TimeStep(obs, reward, done, info)
+            truncated = True
+        return TimeStep(obs, reward, terminated, truncated, info)
 
     def close(self) -> None:
         self._env.close()

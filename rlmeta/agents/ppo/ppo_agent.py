@@ -101,11 +101,15 @@ class PPOAgent(Agent):
         if self._replay_buffer is None:
             return
 
-        obs, _, done, _ = timestep
-        if done:
+        obs, _, terminated, truncated, _ = timestep
+        if terminated or truncated:
             self._trajectory.clear()
         else:
-            self._trajectory = [{"obs": obs, "done": done}]
+            self._trajectory = [{
+                "obs": obs,
+                "terminated": terminated,
+                "truncated": truncated,
+            }]
 
     async def async_observe(self, action: Action,
                             next_timestep: TimeStep) -> None:
@@ -113,29 +117,53 @@ class PPOAgent(Agent):
             return
 
         act, info = action
-        obs, reward, done, _ = next_timestep
+        obs, reward, terminated, truncated, _ = next_timestep
 
         cur = self._trajectory[-1]
         cur["action"] = act
         cur["logpi"] = info["logpi"]
         cur["v"] = info["v"]
         cur["reward"] = reward
-        self._trajectory.append({"obs": obs, "done": done})
+        self._trajectory.append({
+            "obs": obs,
+            "terminated": terminated,
+            "truncated": truncated,
+        })
 
     def update(self) -> None:
-        if not self._trajectory or not self._trajectory[-1]["done"]:
+        if not self._trajectory:
             return
-        if self._replay_buffer is not None:
-            replay = self._make_replay()
-            self._send_replay(replay)
+        last_step = self._trajectory[-1]
+        done = last_step["terminated"] or last_step["truncated"]
+        if self._replay_buffer is None or not done:
+            return
+        last_step["reward"] = 0.0
+        last_v = torch.zeros(1)
+        if last_step["truncated"]:
+            # TODO: Find a better way to compute last_v.
+            _, _, last_v = self._model.act(last_step["obs"],
+                                           self._deterministic_policy)
+        last_step["v"] = last_v
+        replay = self._make_replay()
+        self._send_replay(replay)
         self._trajectory.clear()
 
     async def async_update(self) -> None:
-        if not self._trajectory or not self._trajectory[-1]["done"]:
+        if not self._trajectory:
             return
-        if self._replay_buffer is not None:
-            replay = await self._async_make_replay()
-            await self._async_send_replay(replay)
+        last_step = self._trajectory[-1]
+        done = last_step["terminated"] or last_step["truncated"]
+        if self._replay_buffer is None or not done:
+            return
+        last_step["reward"] = 0.0
+        last_v = torch.zeros(1)
+        if last_step["truncated"]:
+            # TODO: Find a better way to compute last_v.
+            _, _, last_v = await self._model.async_act(
+                last_step["obs"], self._deterministic_policy)
+        last_step["v"] = last_v
+        replay = self._make_replay()
+        await self._async_send_replay(replay)
         self._trajectory.clear()
 
     def train(self,
@@ -191,19 +219,17 @@ class PPOAgent(Agent):
                                           keep_training_loops)
 
     def _make_replay(self) -> List[NestedTensor]:
-        self._trajectory.pop()
-        adv, ret = self._calculate_gae_and_return(
+        adv, ret = self._compute_gae_and_return(
             [x["v"] for x in self._trajectory],
             [x["reward"] for x in self._trajectory], self._reward_rescaler)
+        self._trajectory.pop()
         for cur, a, r in zip(self._trajectory, adv, ret):
             cur["gae"] = a
             cur["ret"] = r
             cur.pop("reward")
-            cur.pop("done")
+            cur.pop("terminated")
+            cur.pop("truncated")
         return self._trajectory
-
-    async def _async_make_replay(self) -> List[NestedTensor]:
-        return self._make_replay()
 
     def _send_replay(self, replay: List[NestedTensor]) -> None:
         batch = []
@@ -227,24 +253,27 @@ class PPOAgent(Agent):
             await self._replay_buffer.async_extend(batch)
             batch.clear()
 
-    def _calculate_gae_and_return(
+    def _compute_gae_and_return(
         self,
-        values: Sequence[Union[float, torch.Tensor]],
-        rewards: Sequence[Union[float, torch.Tensor]],
+        val: Sequence[Union[float, torch.Tensor]],
+        rew: Sequence[Union[float, torch.Tensor]],
         reward_rescaler: Optional[Rescaler] = None
     ) -> Tuple[Iterable[torch.Tensor], Iterable[torch.Tensor]]:
+        n = len(val)
+        v = val[-1]
+        g = torch.zeros(1)
+        gae = torch.zeros(1)
         adv = []
         ret = []
-        gae = torch.zeros(1)
-        v = torch.zeros(1)
-        g = torch.zeros(1)
-        for value, reward in zip(reversed(values), reversed(rewards)):
+        for i in range(n - 2, -1, -1):
+            value, reward = val[i], rew[i]
             if isinstance(reward, float):
                 reward = torch.tensor([reward])
             if reward_rescaler is not None:
                 g = reward + self._gamma * g
                 reward_rescaler.update(g)
                 reward = reward_rescaler.rescale(reward)
+            if self._max_abs_reward is not None:
                 reward.clamp_(-self._max_abs_reward, self._max_abs_reward)
             delta = reward + self._gamma * v - value
             v = value
