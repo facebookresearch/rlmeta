@@ -150,14 +150,14 @@ class PPORNDAgent(PPOAgent):
         next_obs = [
             self._trajectory[i]["obs"] for i in range(1, len(self._trajectory))
         ]
-        int_rewards = self._compute_intrinsic_rewards(next_obs)
+        int_rewards = self._compute_intrinsic_reward(next_obs)
         return self._make_replay_impl(int_rewards)
 
     async def _async_make_replay(self) -> List[NestedTensor]:
         next_obs = [
             self._trajectory[i]["obs"] for i in range(1, len(self._trajectory))
         ]
-        int_rewards = await self._async_compute_intrinsic_rewards(next_obs)
+        int_rewards = await self._async_compute_intrinsic_reward(next_obs)
         return self._make_replay_impl(int_rewards)
 
     def _make_replay_impl(
@@ -183,7 +183,7 @@ class PPORNDAgent(PPOAgent):
 
         return self._trajectory
 
-    def _compute_intrinsic_rewards(
+    def _compute_intrinsic_reward(
             self, next_obs: Sequence[NestedTensor]) -> List[torch.Tensor]:
         int_rewards = []
         n = len(next_obs)
@@ -196,7 +196,7 @@ class PPORNDAgent(PPOAgent):
         int_rewards.append(torch.zeros(1))  # Padding for last step.
         return int_rewards
 
-    async def _async_compute_intrinsic_rewards(
+    async def _async_compute_intrinsic_reward(
             self, obs: Sequence[NestedTensor]) -> List[torch.Tensor]:
         int_rewards = []
         n = len(obs)
