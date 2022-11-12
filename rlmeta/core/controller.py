@@ -17,6 +17,8 @@ class Phase(IntFlag):
     TRAIN = 1
     EVAL = 2
     BOTH = 3
+    TRAIN_ATTACKER = 4 
+    TRAIN_DETECTOR = 5
 
 
 class Controller(remote.Remotable):

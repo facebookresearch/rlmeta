@@ -115,20 +115,27 @@ class MAGymWrapper(GymWrapper):
         for k,v in obs.items():
             obs[k] = self._observation_fn(obs[k])
             timestep[k] = TimeStep(obs[k], done=False)
+        timestep['__all__'] = TimeStep([], done=False)
         return timestep
     
     def step(self, action: Action) -> TimeStep: #TODO check action type
         act = {}
+        info = {}
         for k,v, in action.items():
-            act[k] = v.action
-            if not isinstance(act[k], int):
-                act[k] = act[k].item()
-
+            if isinstance(v, Action):
+                info.update(v.info)
+                v = v.action
+            if not isinstance(v, int):
+                act[k] = v.item()
+            else:
+                act[k] = v
+        act['info'] = info
         obs, reward, done, info = self._env.step(act)
         timestep = {}
         for k,v in obs.items():
             obs[k] = self._observation_fn(obs[k])
-            timestep[k]=TimeStep(obs[k], reward[k], done[k], info[k])
+            timestep[k] = TimeStep(obs[k], reward[k], done[k], info[k])
+        timestep['__all__'] = TimeStep([], done=done['__all__'])
         return timestep
 
 class AtariWrapperFactory(EnvFactory):

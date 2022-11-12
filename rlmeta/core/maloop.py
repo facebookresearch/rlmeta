@@ -192,9 +192,9 @@ class MAAsyncLoop(MALoop, Launchable):
         episode_callbacks: Optional[EpisodeCallbacks] = None
     ) -> Optional[Dict[str, float]]:
         
-        episode_length, episode_return = {}, {}
+        episode_length = 0.0
+        episode_return = {}
         for k,v in agent.items():
-            episode_length[k] = 0
             episode_return[k] = 0.0
         start_time = time.perf_counter()
         if episode_callbacks is not None:
@@ -208,7 +208,7 @@ class MAAsyncLoop(MALoop, Launchable):
         if episode_callbacks is not None:
             episode_callbacks.on_episode_init(index, timestep)
 
-        while not timestep["attacker"].done: #TODO fix the hard-code
+        while not timestep["__all__"].done:
             if not self.running:
                 return None
             action = {}
@@ -224,26 +224,24 @@ class MAAsyncLoop(MALoop, Launchable):
                     if env.action_mask[k]:
                         await agent[k].async_update()
 
+            episode_length += 1
             for k, v in agent.items():
-                episode_length[k] += 1
                 episode_return[k] += timestep[k].reward
             if episode_callbacks is not None:
-                episode_callbacks.on_episode_step(index, episode_length['attacker'] - 1,# TODO fix the hardcode
+                episode_callbacks.on_episode_step(index, episode_length - 1,
                                                   action, timestep)
 
         episode_time = time.perf_counter() - start_time
-        steps_per_second = episode_length['attacker'] / episode_time #TODO fix the hardcode
+        steps_per_second = episode_length / episode_time
         if episode_callbacks is not None:
             episode_callbacks.on_episode_end(index)
 
         metrics = {
-            #"episode_length": float(episode_length),
-            #"episode_return": episode_return,
+            "episode_length": float(episode_length),
             "episode_time/s": episode_time,
             "steps_per_second": steps_per_second,
         }
         for k,v in agent.items():
-            metrics.update({k+"_episode_length": float(episode_length[k])})
             metrics.update({k+"_episode_return": episode_return[k]})
         if episode_callbacks is not None:
             metrics.update(episode_callbacks.custom_metrics)
