@@ -204,6 +204,9 @@ class MAAsyncLoop(MALoop, Launchable):
         timestep = env.reset()
         for k,v in agent.items():
             if env.action_mask[k]:
+                if timestep[k].info is None:
+                    timestep[k].info = {}
+                timestep[k].info.update({"episode_reset":True})
                 await agent[k].async_observe_init(timestep[k])
         if episode_callbacks is not None:
             episode_callbacks.on_episode_init(index, timestep)

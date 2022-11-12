@@ -80,7 +80,7 @@ class GymWrapper(Env):
     def reset(self, *args, **kwargs) -> TimeStep:
         obs = self._env.reset(*args, **kwargs)
         obs = self._observation_fn(obs)
-        return TimeStep(obs, done=False)
+        return TimeStep(obs, done=False, info={})
 
     def step(self, action: Action) -> TimeStep:
         act = action.action
@@ -114,8 +114,8 @@ class MAGymWrapper(GymWrapper):
         timestep = {}
         for k,v in obs.items():
             obs[k] = self._observation_fn(obs[k])
-            timestep[k] = TimeStep(obs[k], done=False)
-        timestep['__all__'] = TimeStep([], done=False)
+            timestep[k] = TimeStep(obs[k], done=False, info={})
+        timestep['__all__'] = TimeStep([], done=False, info={})
         return timestep
     
     def step(self, action: Action) -> TimeStep: #TODO check action type
