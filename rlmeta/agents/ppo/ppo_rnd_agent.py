@@ -86,13 +86,12 @@ class PPORNDAgent(PPOAgent):
                           "int_v": int_v,
                       })
 
-    async def async_observe(self, action: Action,
-                            next_timestep: TimeStep) -> None:
+    def observe(self, action: Action, next_timestep: TimeStep) -> None:
         if self._replay_buffer is None:
             return
 
         act, info = action
-        obs, reward, done, _ = next_timestep
+        obs, reward, terminated, truncated, _ = next_timestep
 
         cur = self._trajectory[-1]
         cur["reward"] = reward
@@ -100,36 +99,81 @@ class PPORNDAgent(PPOAgent):
         cur["logpi"] = info["logpi"]
         cur["ext_v"] = info["ext_v"]
         cur["int_v"] = info["int_v"]
-        self._trajectory.append({"obs": obs, "done": done})
+        self._trajectory.append({
+            "obs": obs,
+            "terminated": terminated,
+            "truncated": truncated,
+        })
+
+    async def async_observe(self, action: Action,
+                            next_timestep: TimeStep) -> None:
+        self.observe(action, next_timestep)
+
+    def update(self) -> None:
+        if not self._trajectory:
+            return
+        last_step = self._trajectory[-1]
+        done = last_step["terminated"] or last_step["truncated"]
+        if self._replay_buffer is None or not done:
+            return
+        last_step["reward"] = 0.0
+        last_ext_v = torch.zeros(1)
+        last_int_v = torch.zeros(1)
+        if last_step["truncated"]:
+            # TODO: Find a better way to compute last_v.
+            _, _, last_ext_v, last_int_v = self._model.act(
+                last_step["obs"], self._deterministic_policy)
+        last_step["ext_v"] = last_ext_v
+        last_step["int_v"] = last_int_v
+        replay = self._make_replay()
+        self._send_replay(replay)
+        self._trajectory.clear()
+
+    async def async_update(self) -> None:
+        if not self._trajectory:
+            return
+        last_step = self._trajectory[-1]
+        done = last_step["terminated"] or last_step["truncated"]
+        if self._replay_buffer is None or not done:
+            return
+        last_step["reward"] = 0.0
+        last_ext_v = torch.zeros(1)
+        last_int_v = torch.zeros(1)
+        if last_step["truncated"]:
+            # TODO: Find a better way to compute last_v.
+            _, _, last_ext_v, last_int_v = await self._model.async_act(
+                last_step["obs"], self._deterministic_policy)
+        last_step["ext_v"] = last_ext_v
+        last_step["int_v"] = last_int_v
+        replay = self._make_replay()
+        await self._async_send_replay(replay)
+        self._trajectory.clear()
 
     def _make_replay(self) -> List[NestedTensor]:
         next_obs = [
             self._trajectory[i]["obs"] for i in range(1, len(self._trajectory))
         ]
-        int_rewards = self._compute_intrinsic_rewards(next_obs,
-                                                      done_at_last=True)
+        int_rewards = self._compute_intrinsic_reward(next_obs)
         return self._make_replay_impl(int_rewards)
 
     async def _async_make_replay(self) -> List[NestedTensor]:
         next_obs = [
             self._trajectory[i]["obs"] for i in range(1, len(self._trajectory))
         ]
-        int_rewards = await self._async_compute_intrinsic_rewards(
-            next_obs, done_at_last=True)
+        int_rewards = await self._async_compute_intrinsic_reward(next_obs)
         return self._make_replay_impl(int_rewards)
 
     def _make_replay_impl(
             self,
             intrinsic_rewards: Sequence[NestedTensor]) -> List[NestedTensor]:
-        self._trajectory.pop()
-
-        ext_adv, ext_ret = self._calculate_gae_and_return(
+        ext_adv, ext_ret = self._compute_gae_and_return(
             [x["ext_v"] for x in self._trajectory],
             [x["reward"] for x in self._trajectory], self._ext_reward_rescaler)
-        int_adv, int_ret = self._calculate_gae_and_return(
+        int_adv, int_ret = self._compute_gae_and_return(
             [x["int_v"] for x in self._trajectory], intrinsic_rewards,
             self._int_reward_rescaler)
 
+        self._trajectory.pop()
         for cur, ext_a, ext_r, int_a, int_r in zip(self._trajectory, ext_adv,
                                                    ext_ret, int_adv, int_ret):
             cur["ext_gae"] = ext_a
@@ -137,30 +181,26 @@ class PPORNDAgent(PPOAgent):
             cur["int_gae"] = int_a
             cur["int_ret"] = int_r
             cur.pop("reward")
-            cur.pop("done")
+            cur.pop("terminated")
+            cur.pop("truncated")
 
         return self._trajectory
 
-    def _compute_intrinsic_rewards(
-            self,
-            obs: Sequence[NestedTensor],
-            done_at_last: bool = True) -> List[torch.Tensor]:
+    def _compute_intrinsic_reward(
+            self, next_obs: Sequence[NestedTensor]) -> List[torch.Tensor]:
         int_rewards = []
-        n = len(obs)
-        obs = nested_utils.collate_nested(self._collate_fn, obs)
+        n = len(next_obs)
+        next_obs = nested_utils.collate_nested(self._collate_fn, next_obs)
         for i in range(0, n, self._local_batch_size):
             batch = nested_utils.map_nested(
-                lambda x, i=i: x[i:i + self._local_batch_size], obs)
+                lambda x, i=i: x[i:i + self._local_batch_size], next_obs)
             cur_rewards = self._model.intrinsic_reward(batch)
             int_rewards.extend(torch.unbind(cur_rewards))
-        if done_at_last:
-            int_rewards[-1].zero_()
+        int_rewards.append(torch.zeros(1))  # Padding for last step.
         return int_rewards
 
-    async def _async_compute_intrinsic_rewards(
-            self,
-            obs: Sequence[NestedTensor],
-            done_at_last: bool = True) -> List[torch.Tensor]:
+    async def _async_compute_intrinsic_reward(
+            self, obs: Sequence[NestedTensor]) -> List[torch.Tensor]:
         int_rewards = []
         n = len(obs)
         obs = nested_utils.collate_nested(self._collate_fn, obs)
@@ -169,8 +209,7 @@ class PPORNDAgent(PPOAgent):
                 lambda x, i=i: x[i:i + self._local_batch_size], obs)
             cur_rewards = await self._model.async_intrinsic_reward(batch)
             int_rewards.extend(torch.unbind(cur_rewards))
-        if done_at_last:
-            int_rewards[-1].zero_()
+        int_rewards.append(torch.zeros(1))  # Padding for last step
         return int_rewards
 
     def _train_step(self, batch: NestedTensor) -> Dict[str, float]:

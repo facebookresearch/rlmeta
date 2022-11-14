@@ -14,7 +14,7 @@ from rlmeta.core.types import NestedTensor
 class Env(abc.ABC):
 
     @abc.abstractmethod
-    def reset(self, *args, **kwargs) -> TimeStep:
+    def reset(self, *args, seed: Optional[int] = None, **kwargs) -> TimeStep:
         """
         Reset env.
         """
@@ -29,12 +29,6 @@ class Env(abc.ABC):
     def close(self) -> None:
         """
         Release resources.
-        """
-
-    @abc.abstractmethod
-    def seed(self, seed: Optional[int] = None) -> None:
-        """
-        Set seed.
         """
 
 

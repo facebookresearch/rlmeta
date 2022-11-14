@@ -5,9 +5,11 @@
 
 from typing import Callable, Optional
 
-import gym
 import numpy as np
 import torch
+
+import gym
+from gym.wrappers.step_api_compatibility import StepAPICompatibility
 
 import rlmeta.envs.atari_wrappers as atari_wrappers
 import rlmeta.utils.data_utils as data_utils
@@ -40,17 +42,19 @@ class ImageObservationWrapper(gym.ObservationWrapper):
 
 class GymWrapper(Env):
 
-    def __init__(
-            self,
-            env: gym.Env,
-            observation_fn: Optional[Callable[..., Tensor]] = None) -> None:
+    def __init__(self,
+                 env: gym.Env,
+                 observation_fn: Optional[Callable[..., Tensor]] = None,
+                 old_step_api: bool = False) -> None:
         super(GymWrapper, self).__init__()
 
-        self._env = env
+        self._env = StepAPICompatibility(
+            env, output_truncation_bool=True) if old_step_api else env
         self._action_space = self._env.action_space
         self._observation_space = self._env.observation_space
         self._reward_range = self._env.reward_range
         self._metadata = self._env.metadata
+        self._old_step_api = old_step_api
 
         if observation_fn is not None:
             self._observation_fn = observation_fn
@@ -77,24 +81,29 @@ class GymWrapper(Env):
     def metadata(self):
         return self._metadata
 
-    def reset(self, *args, **kwargs) -> TimeStep:
-        obs = self._env.reset(*args, **kwargs)
+    def reset(self, *args, seed: Optional[int] = None, **kwargs) -> TimeStep:
+        # TODO: Clean up this function when most envs fully migrated to the new
+        # OpenAI Gym API.
+        if self._old_step_api:
+            if seed is not None:
+                self._env.seed(seed)
+            obs = self._env.reset(*args, **kwargs)
+            info = None
+        else:
+            obs, info = self._env.reset(*args, seed=seed, **kwargs)
         obs = self._observation_fn(obs)
-        return TimeStep(obs, done=False)
+        return TimeStep(obs, info=info)
 
     def step(self, action: Action) -> TimeStep:
         act = action.action
         if not isinstance(act, int):
             act = act.item()
-        obs, reward, done, info = self._env.step(act)
+        obs, reward, terminated, truncated, info = self._env.step(act)
         obs = self._observation_fn(obs)
-        return TimeStep(obs, reward, done, info)
+        return TimeStep(obs, reward, terminated, truncated, info)
 
     def close(self) -> None:
         self._env.close()
-
-    def seed(self, seed: Optional[int] = None) -> None:
-        self._env.seed(seed)
 
 
 class AtariWrapperFactory(EnvFactory):

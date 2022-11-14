@@ -87,6 +87,7 @@ def main(cfg):
         batch_size=cfg.batch_size,
         n_step=cfg.n_step,
         importance_sampling_exponent=cfg.importance_sampling_exponent,
+        value_clipping_eps=cfg.value_clipping_eps,
         target_sync_period=cfg.target_sync_period,
         learning_starts=cfg.learning_starts,
         model_push_period=cfg.model_push_period)
