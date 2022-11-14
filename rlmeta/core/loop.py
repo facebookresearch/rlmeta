@@ -114,7 +114,7 @@ class AsyncLoop(Loop, Launchable):
         for i in range(self._num_rollouts):
             env = self._env_factory(self.index_offset + i)
             if self.seed is not None:
-                env.seed(self.seed + self.index_offset + i)
+                env.reset(seed=self.seed + self.index_offset + i)
             self._envs.append(env)
 
         for i in range(self._num_rollouts):

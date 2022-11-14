@@ -48,7 +48,8 @@ class GymWrapper(Env):
                  old_step_api: bool = False) -> None:
         super(GymWrapper, self).__init__()
 
-        self._env = StepAPICompatibility(env) if old_step_api else env
+        self._env = StepAPICompatibility(
+            env, output_truncation_bool=True) if old_step_api else env
         self._action_space = self._env.action_space
         self._observation_space = self._env.observation_space
         self._reward_range = self._env.reward_range
@@ -80,8 +81,26 @@ class GymWrapper(Env):
     def metadata(self):
         return self._metadata
 
-    def reset(self, *args, **kwargs) -> TimeStep:
-        obs, info = self._env.reset(*args, **kwargs)
+    def reset(self, *args, seed: Optional[int] = None, **kwargs) -> TimeStep:
+        # TODO: Clean up this function when most envs fully migrated to the new
+        # OpenAI Gym API.
+        seed_func = getattr(self._env, "seed", None)
+        if self._old_step_api:
+            if callable(seed_func):
+                if seed is not None:
+                    seed_func(seed)
+                obs = self._env.reset(*args, **kwargs)
+            else:
+                obs = self._env.reset(*args, seed=seed, **kwargs)
+            info = None
+        else:
+            if callable(seed_func):
+                if seed is not None:
+                    seed_func(seed)
+                obs, info = self._env.reset(*args, **kwargs)
+            else:
+                obs, info = self._env.reset(*args, seed=seed, **kwargs)
+
         obs = self._observation_fn(obs)
         return TimeStep(obs, info=info)
 
@@ -95,9 +114,6 @@ class GymWrapper(Env):
 
     def close(self) -> None:
         self._env.close()
-
-    def seed(self, seed: Optional[int] = None) -> None:
-        self._env.seed(seed)
 
 
 class AtariWrapperFactory(EnvFactory):
