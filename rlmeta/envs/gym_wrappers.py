@@ -84,23 +84,13 @@ class GymWrapper(Env):
     def reset(self, *args, seed: Optional[int] = None, **kwargs) -> TimeStep:
         # TODO: Clean up this function when most envs fully migrated to the new
         # OpenAI Gym API.
-        seed_func = getattr(self._env, "seed", None)
         if self._old_step_api:
-            if callable(seed_func):
-                if seed is not None:
-                    seed_func(seed)
-                obs = self._env.reset(*args, **kwargs)
-            else:
-                obs = self._env.reset(*args, seed=seed, **kwargs)
+            if seed is not None:
+                self._env.seed(seed)
+            obs = self._env.reset(*args, **kwargs)
             info = None
         else:
-            if callable(seed_func):
-                if seed is not None:
-                    seed_func(seed)
-                obs, info = self._env.reset(*args, **kwargs)
-            else:
-                obs, info = self._env.reset(*args, seed=seed, **kwargs)
-
+            obs, info = self._env.reset(*args, seed=seed, **kwargs)
         obs = self._observation_fn(obs)
         return TimeStep(obs, info=info)
 

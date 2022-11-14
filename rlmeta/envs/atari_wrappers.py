@@ -21,6 +21,7 @@
 import os
 
 from collections import deque
+from typing import Any, Dict, Optional, Tuple
 
 import cv2
 import numpy as np
@@ -34,7 +35,7 @@ cv2.ocl.setUseOpenCL(False)
 
 class NoopResetEnv(gym.Wrapper):
 
-    def __init__(self, env, noop_max=30):
+    def __init__(self, env: gym.Env, noop_max: int = 30) -> None:
         """Sample initial states by taking random number of no-ops on reset.
         No-op is assumed to be action 0.
         """
@@ -44,9 +45,12 @@ class NoopResetEnv(gym.Wrapper):
         self.noop_action = 0
         assert env.unwrapped.get_action_meanings()[0] == 'NOOP'
 
-    def reset(self, **kwargs):
+    def reset(self,
+              *args,
+              seed: Optional[int] = None,
+              **kwargs) -> Tuple[Any, Dict]:
         """ Do no-op action for a number of steps in [1, noop_max]."""
-        _, info = self.env.reset(**kwargs)
+        _, info = self.env.reset(*args, seed=seed, **kwargs)
         if self.override_num_noops is not None:
             noops = self.override_num_noops
         else:
@@ -57,7 +61,7 @@ class NoopResetEnv(gym.Wrapper):
             obs, _, terminated, truncated, info = self.env.step(
                 self.noop_action)
             if terminated or truncated:
-                obs, info = self.env.reset(**kwargs)
+                obs, info = self.env.reset(*args, **kwargs)
         return obs, info
 
     def step(self, ac):
@@ -66,20 +70,23 @@ class NoopResetEnv(gym.Wrapper):
 
 class FireResetEnv(gym.Wrapper):
 
-    def __init__(self, env):
+    def __init__(self, env: gym.Env) -> None:
         """Take action on reset for environments that are fixed until firing."""
         gym.Wrapper.__init__(self, env)
         assert env.unwrapped.get_action_meanings()[1] == 'FIRE'
         assert len(env.unwrapped.get_action_meanings()) >= 3
 
-    def reset(self, **kwargs):
-        _, info = self.env.reset(**kwargs)
+    def reset(self,
+              *args,
+              seed: Optional[int] = None,
+              **kwargs) -> Tuple[Any, Dict]:
+        _, info = self.env.reset(*args, seed=seed, **kwargs)
         obs, _, terminated, truncated, info = self.env.step(1)
         if terminated or truncated:
-            _, info = self.env.reset(**kwargs)
+            _, info = self.env.reset(*args, **kwargs)
         obs, _, terminated, truncated, info = self.env.step(2)
         if terminated or truncated:
-            _, info = self.env.reset(**kwargs)
+            _, info = self.env.reset(*args, **kwargs)
         return obs, info
 
     def step(self, ac):
@@ -88,13 +95,29 @@ class FireResetEnv(gym.Wrapper):
 
 class EpisodicLifeEnv(gym.Wrapper):
 
-    def __init__(self, env):
+    def __init__(self, env: gym.Env) -> None:
         """Make end-of-life == end-of-episode, but only reset on true game over.
         Done by DeepMind for the DQN and co. since it helps value estimation.
         """
         gym.Wrapper.__init__(self, env)
         self.lives = 0
         self.was_real_done = True
+
+    def reset(self,
+              *args,
+              seed: Optional[int] = None,
+              **kwargs) -> Tuple[Any, Dict]:
+        """Reset only when lives are exhausted.
+        This way all states are still reachable even though lives are episodic,
+        and the learner need not know about any of this behind-the-scenes.
+        """
+        if self.was_real_done:
+            obs, info = self.env.reset(*args, seed=seed, **kwargs)
+        else:
+            # no-op step to advance from terminal/lost life state
+            obs, _, _, _, info = self.env.step(0)
+        self.lives = self.env.unwrapped.ale.lives()
+        return obs, info
 
     def step(self, action):
         obs, reward, terminated, truncated, info = self.env.step(action)
@@ -110,29 +133,22 @@ class EpisodicLifeEnv(gym.Wrapper):
         self.lives = lives
         return obs, reward, terminated, truncated, info
 
-    def reset(self, **kwargs):
-        """Reset only when lives are exhausted.
-        This way all states are still reachable even though lives are episodic,
-        and the learner need not know about any of this behind-the-scenes.
-        """
-        if self.was_real_done:
-            obs, info = self.env.reset(**kwargs)
-        else:
-            # no-op step to advance from terminal/lost life state
-            obs, _, _, _, info = self.env.step(0)
-        self.lives = self.env.unwrapped.ale.lives()
-        return obs, info
-
 
 class MaxAndSkipEnv(gym.Wrapper):
 
-    def __init__(self, env, skip=4):
+    def __init__(self, env: gym.Env, skip: int = 4) -> None:
         """Return only every `skip`-th frame"""
         gym.Wrapper.__init__(self, env)
         # most recent raw observations (for max pooling across time steps)
         self._obs_buffer = np.zeros((2,) + env.observation_space.shape,
                                     dtype=np.uint8)
         self._skip = skip
+
+    def reset(self,
+              *args,
+              seed: Optional[int] = None,
+              **kwargs) -> Tuple[Any, Dict]:
+        return self.env.reset(*args, seed=seed, **kwargs)
 
     def step(self, action):
         """Repeat action, sum reward, and max over last observations."""
@@ -153,9 +169,6 @@ class MaxAndSkipEnv(gym.Wrapper):
         max_frame = self._obs_buffer.max(axis=0)
 
         return max_frame, total_reward, terminated, truncated, info
-
-    def reset(self, **kwargs):
-        return self.env.reset(**kwargs)
 
 
 class ClipRewardEnv(gym.RewardWrapper):
@@ -230,7 +243,7 @@ class WarpFrame(gym.ObservationWrapper):
 
 class FrameStack(gym.Wrapper):
 
-    def __init__(self, env, k):
+    def __init__(self, env: gym.Env, k: int) -> None:
         """Stack k last frames.
 
         Returns lazy array, which is much more memory efficient.
@@ -248,8 +261,11 @@ class FrameStack(gym.Wrapper):
                                             shape=(shp[:-1] + (shp[-1] * k,)),
                                             dtype=env.observation_space.dtype)
 
-    def reset(self):
-        ob, info = self.env.reset()
+    def reset(self,
+              *args,
+              seed: Optional[int] = None,
+              **kwargs) -> Tuple[Any, Dict]:
+        ob, info = self.env.reset(*args, seed=seed, **kwargs)
         for _ in range(self.k):
             self.frames.append(ob)
         return self._get_ob(), info
@@ -266,7 +282,7 @@ class FrameStack(gym.Wrapper):
 
 class ScaledFloatFrame(gym.ObservationWrapper):
 
-    def __init__(self, env):
+    def __init__(self, env: gym.Env) -> None:
         gym.ObservationWrapper.__init__(self, env)
         self.observation_space = gym.spaces.Box(
             low=0, high=1, shape=env.observation_space.shape, dtype=np.float32)
