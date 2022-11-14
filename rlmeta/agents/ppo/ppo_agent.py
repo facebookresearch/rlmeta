@@ -97,7 +97,7 @@ class PPOAgent(Agent):
             obs, self._deterministic_policy)
         return Action(action, info={"logpi": logpi, "v": v})
 
-    async def async_observe_init(self, timestep: TimeStep) -> None:
+    def observe_init(self, timestep: TimeStep) -> None:
         if self._replay_buffer is None:
             return
 
@@ -111,8 +111,10 @@ class PPOAgent(Agent):
                 "truncated": truncated,
             }]
 
-    async def async_observe(self, action: Action,
-                            next_timestep: TimeStep) -> None:
+    async def async_observe_init(self, timestep: TimeStep) -> None:
+        self.observe_init(timestep)
+
+    def observe(self, action: Action, next_timestep: TimeStep) -> None:
         if self._replay_buffer is None:
             return
 
@@ -129,6 +131,10 @@ class PPOAgent(Agent):
             "terminated": terminated,
             "truncated": truncated,
         })
+
+    async def async_observe(self, action: Action,
+                            next_timestep: TimeStep) -> None:
+        self.observe(action, next_timestep)
 
     def update(self) -> None:
         if not self._trajectory:

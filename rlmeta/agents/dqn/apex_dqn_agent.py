@@ -103,7 +103,7 @@ class ApexDQNAgent(Agent):
         action, q, v = await self._model.async_act(obs, self._eps)
         return Action(action, info={"q": q, "v": v})
 
-    async def async_observe_init(self, timestep: TimeStep) -> None:
+    def observe_init(self, timestep: TimeStep) -> None:
         if self._replay_buffer is None:
             return
 
@@ -117,8 +117,10 @@ class ApexDQNAgent(Agent):
                 "truncated": truncated,
             }]
 
-    async def async_observe(self, action: Action,
-                            next_timestep: TimeStep) -> None:
+    async def async_observe_init(self, timestep: TimeStep) -> None:
+        self.observe_init(timestep)
+
+    def observe(self, action: Action, next_timestep: TimeStep) -> None:
         if self._replay_buffer is None:
             return
         act, info = action
@@ -134,6 +136,10 @@ class ApexDQNAgent(Agent):
             "terminated": terminated,
             "truncated": truncated,
         })
+
+    async def async_observe(self, action: Action,
+                            next_timestep: TimeStep) -> None:
+        self.observe(action, next_timestep)
 
     def update(self) -> None:
         if not self._trajectory:

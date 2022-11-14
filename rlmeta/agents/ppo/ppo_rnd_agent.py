@@ -86,8 +86,7 @@ class PPORNDAgent(PPOAgent):
                           "int_v": int_v,
                       })
 
-    async def async_observe(self, action: Action,
-                            next_timestep: TimeStep) -> None:
+    def observe(self, action: Action, next_timestep: TimeStep) -> None:
         if self._replay_buffer is None:
             return
 
@@ -105,6 +104,10 @@ class PPORNDAgent(PPOAgent):
             "terminated": terminated,
             "truncated": truncated,
         })
+
+    async def async_observe(self, action: Action,
+                            next_timestep: TimeStep) -> None:
+        self.observe(action, next_timestep)
 
     def update(self) -> None:
         if not self._trajectory:
