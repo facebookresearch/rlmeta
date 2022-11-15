@@ -262,10 +262,10 @@ class ApexDQNAgent(Agent):
             nxt_reward = nxt["reward"]
             nxt_v = nxt["v"]
 
-            if isinstance(cur_reward, float):
-                cur_reward = torch.tensor([cur_reward])
-            if isinstance(nxt_reward, float):
-                nxt_reward = torch.tensor([nxt_reward])
+            if not isinstance(cur_reward, torch.Tensor):
+                cur_reward = torch.tensor([cur_reward], dtype=torch.float32)
+            if not isinstance(nxt_reward, torch.Tensor):
+                nxt_reward = torch.tensor([nxt_reward], dtype=torch.float32)
             if self._max_abs_reward is not None:
                 cur_reward.clamp_(-self._max_abs_reward, self._max_abs_reward)
                 nxt_reward.clamp_(-self._max_abs_reward, self._max_abs_reward)

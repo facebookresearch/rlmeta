@@ -273,8 +273,8 @@ class PPOAgent(Agent):
         ret = []
         for i in range(n - 2, -1, -1):
             value, reward = val[i], rew[i]
-            if isinstance(reward, float):
-                reward = torch.tensor([reward])
+            if not isinstance(reward, torch.Tensor):
+                reward = torch.tensor([reward], dtype=torch.float32)
             if reward_rescaler is not None:
                 g = reward + self._gamma * g
                 reward_rescaler.update(g)
