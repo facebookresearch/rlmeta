@@ -9,9 +9,11 @@ import numpy as np
 
 import gym
 
+from gym.wrappers.frame_stack import LazyFrames
 from gym.wrappers.step_api_compatibility import StepAPICompatibility
 
 import rlmeta.utils.data_utils as data_utils
+import rlmeta.utils.nested_utils as nested_utils
 
 from rlmeta.core.types import Action, TimeStep
 from rlmeta.core.types import Tensor, NestedTensor
@@ -69,9 +71,9 @@ class GymWrapper(Env):
             info = None
         else:
             obs, info = self._env.reset(*args, seed=seed, **kwargs)
-        if not isinstance(obs, np.ndarray):
-            obs = np.asarray(obs)
-        obs = self._observation_fn(obs)
+        obs = nested_utils.map_nested(
+            lambda x: self._observation_fn(
+                np.asarray(x) if isinstance(x, LazyFrames) else x), obs)
         return TimeStep(obs, info=info)
 
     def step(self, action: Action) -> TimeStep:
@@ -79,9 +81,9 @@ class GymWrapper(Env):
         if not isinstance(act, int):
             act = act.item()
         obs, reward, terminated, truncated, info = self._env.step(act)
-        if not isinstance(obs, np.ndarray):
-            obs = np.asarray(obs)
-        obs = self._observation_fn(obs)
+        obs = nested_utils.map_nested(
+            lambda x: self._observation_fn(
+                np.asarray(x) if isinstance(x, LazyFrames) else x), obs)
         return TimeStep(obs, reward, terminated, truncated, info)
 
     def close(self) -> None:
