@@ -22,7 +22,7 @@ To run the example for Atari Pong game with PPO algorithm:
 
 ```
 $ cd examples/atari/ppo
-$ python atari_ppo.py env="PongNoFrameskip-v4" num_epochs=20
+$ python atari_ppo.py env.game="Pong" num_epochs=20
 ```
 
 We are using [`hydra`](https://hydra.cc/) to define configs for trainining jobs.
