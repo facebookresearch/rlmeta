@@ -10,14 +10,16 @@ c_server_addr: "127.0.0.1:4413"
 train_device: "cuda:0"
 infer_device: "cuda:1"
 
-env: "PongNoFrameskip-v4"
-max_episode_steps: 3000
+env:
+  game: "Pong"
+  repeat_action_probability: 0.0  # v4
+  max_episode_steps: 10000
 
 num_train_rollouts: 32
 num_train_workers: 16
 
-num_eval_rollouts: 8
-num_eval_workers: 4
+num_eval_rollouts: 4
+num_eval_workers: 2
 
 train_eps: 0.4
 eval_eps: 0.01
@@ -32,8 +34,8 @@ max_abs_reward: 1
 rescale_value: False
 value_clipping_eps: 0.2
 
-double_dqn: False
-target_sync_period: null
+double_dqn: True
+target_sync_period: 2500
 
 batch_size: 512
 n_step: 3
@@ -48,9 +50,8 @@ optimizer:
 num_epochs: 1000
 steps_per_epoch: 3000
 
-num_eval_episodes: 20
+num_eval_episodes: 10
 
-train_seed: 123
-eval_seed: 456
+seed: null
 
 table_view: False

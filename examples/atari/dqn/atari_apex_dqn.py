@@ -12,9 +12,9 @@ import hydra
 import torch
 import torch.multiprocessing as mp
 
-import rlmeta.envs.atari_wrappers as atari_wrappers
-import rlmeta.envs.gym_wrappers as gym_wrappers
+import rlmeta.envs.atari_wrapper as atari_wrapper
 import rlmeta.utils.hydra_utils as hydra_utils
+import rlmeta.utils.random_utils as random_utils
 import rlmeta.utils.remote_utils as remote_utils
 
 from examples.atari.dqn.atari_dqn_model import AtariDQNModel
@@ -33,9 +33,11 @@ from rlmeta.utils.optimizer_utils import get_optimizer
 
 @hydra.main(config_path="./conf", config_name="conf_apex_dqn")
 def main(cfg):
+    if cfg.seed is not None:
+        random_utils.manual_seed(cfg.seed)
     logging.info(hydra_utils.config_to_json(cfg))
 
-    env = atari_wrappers.make_atari(cfg.env)
+    env = atari_wrapper.make_atari_env(**cfg.env)
     train_model = AtariDQNModel(env.action_space.n,
                                 double_dqn=cfg.double_dqn).to(cfg.train_device)
     infer_model = copy.deepcopy(train_model).to(cfg.infer_device)
@@ -74,12 +76,37 @@ def main(cfg):
                                      timeout=120)
     t_rb = make_remote_replay_buffer(rb, r_server)
 
-    t_env_fac = gym_wrappers.AtariWrapperFactory(
-        cfg.env, max_episode_steps=cfg.max_episode_steps)
-    e_env_fac = gym_wrappers.AtariWrapperFactory(
-        cfg.env, max_episode_steps=cfg.max_episode_steps)
+    env_fac = atari_wrapper.AtariWrapperFactory(**cfg.env)
 
-    agent = ApexDQNAgent(
+    t_agent_fac = ApexDQNAgentFactory(t_model,
+                                      FlexibleEpsFunc(cfg.train_eps,
+                                                      cfg.num_train_rollouts),
+                                      replay_buffer=t_rb,
+                                      n_step=cfg.n_step,
+                                      max_abs_reward=cfg.max_abs_reward,
+                                      rescale_value=cfg.rescale_value)
+    e_agent_fac = ApexDQNAgentFactory(e_model, ConstantEpsFunc(cfg.eval_eps))
+
+    t_loop = ParallelLoop(env_fac,
+                          t_agent_fac,
+                          t_ctrl,
+                          running_phase=Phase.TRAIN,
+                          should_update=True,
+                          num_rollouts=cfg.num_train_rollouts,
+                          num_workers=cfg.num_train_workers,
+                          seed=cfg.seed)
+    e_loop = ParallelLoop(env_fac,
+                          e_agent_fac,
+                          e_ctrl,
+                          running_phase=Phase.EVAL,
+                          should_update=False,
+                          num_rollouts=cfg.num_eval_rollouts,
+                          num_workers=cfg.num_eval_workers,
+                          seed=(None if cfg.seed is None else cfg.seed +
+                                cfg.num_train_rollouts))
+    loops = LoopList([t_loop, e_loop])
+
+    learner = ApexDQNAgent(
         a_model,
         replay_buffer=a_rb,
         controller=a_ctrl,
@@ -91,40 +118,14 @@ def main(cfg):
         target_sync_period=cfg.target_sync_period,
         learning_starts=cfg.learning_starts,
         model_push_period=cfg.model_push_period)
-    t_agent_fac = ApexDQNAgentFactory(t_model,
-                                      FlexibleEpsFunc(cfg.train_eps,
-                                                      cfg.num_train_rollouts),
-                                      replay_buffer=t_rb,
-                                      n_step=cfg.n_step,
-                                      max_abs_reward=cfg.max_abs_reward,
-                                      rescale_value=cfg.rescale_value)
-    e_agent_fac = ApexDQNAgentFactory(e_model, ConstantEpsFunc(cfg.eval_eps))
-
-    t_loop = ParallelLoop(t_env_fac,
-                          t_agent_fac,
-                          t_ctrl,
-                          running_phase=Phase.TRAIN,
-                          should_update=True,
-                          num_rollouts=cfg.num_train_rollouts,
-                          num_workers=cfg.num_train_workers,
-                          seed=cfg.train_seed)
-    e_loop = ParallelLoop(e_env_fac,
-                          e_agent_fac,
-                          e_ctrl,
-                          running_phase=Phase.EVAL,
-                          should_update=False,
-                          num_rollouts=cfg.num_eval_rollouts,
-                          num_workers=cfg.num_eval_workers,
-                          seed=cfg.eval_seed)
-    loops = LoopList([t_loop, e_loop])
 
     servers.start()
     loops.start()
-    agent.connect()
+    learner.connect()
 
     start_time = time.perf_counter()
     for epoch in range(cfg.num_epochs):
-        stats = agent.train(cfg.steps_per_epoch)
+        stats = learner.train(cfg.steps_per_epoch)
         cur_time = time.perf_counter() - start_time
         info = f"T Epoch {epoch}"
         if cfg.table_view:
@@ -134,7 +135,7 @@ def main(cfg):
                 stats.json(info, phase="Train", epoch=epoch, time=cur_time))
         time.sleep(1)
 
-        stats = agent.eval(cfg.num_eval_episodes, keep_training_loops=True)
+        stats = learner.eval(cfg.num_eval_episodes, keep_training_loops=True)
         cur_time = time.perf_counter() - start_time
         info = f"E Epoch {epoch}"
         if cfg.table_view:

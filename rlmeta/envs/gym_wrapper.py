@@ -3,41 +3,19 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Callable, Optional
+from typing import Any, Callable, Dict, Optional, Tuple, Union
 
 import numpy as np
-import torch
 
 import gym
+
 from gym.wrappers.step_api_compatibility import StepAPICompatibility
 
-import rlmeta.envs.atari_wrappers as atari_wrappers
 import rlmeta.utils.data_utils as data_utils
 
 from rlmeta.core.types import Action, TimeStep
 from rlmeta.core.types import Tensor, NestedTensor
-from rlmeta.envs.env import Env, EnvFactory
-from rlmeta.envs.wrappers import TimeLimitWrapper
-
-
-class ImageObservationWrapper(gym.ObservationWrapper):
-    """
-    Wrap image observation from NHWC order to NCHW order.
-    """
-
-    def __init__(self, env: gym.Env) -> None:
-        super().__init__(env)
-
-        shape = self.observation_space.shape
-        dtype = self.observation_space.dtype
-        self.observation_space = gym.spaces.Box(low=0,
-                                                high=255,
-                                                shape=(shape[2], shape[0],
-                                                       shape[1]),
-                                                dtype=dtype)
-
-    def observation(self, observation: np.ndarray) -> None:
-        return np.ascontiguousarray(np.transpose(observation, axes=(2, 0, 1)))
+from rlmeta.envs.env import Env
 
 
 class GymWrapper(Env):
@@ -82,8 +60,8 @@ class GymWrapper(Env):
         return self._metadata
 
     def reset(self, *args, seed: Optional[int] = None, **kwargs) -> TimeStep:
-        # TODO: Clean up this function when most envs fully migrated to the new
-        # OpenAI Gym API.
+        # TODO: Clean up this function when most envs are fully migrated to the
+        # new OpenAI Gym API.
         if self._old_step_api:
             if seed is not None:
                 self._env.seed(seed)
@@ -91,6 +69,8 @@ class GymWrapper(Env):
             info = None
         else:
             obs, info = self._env.reset(*args, seed=seed, **kwargs)
+        if not isinstance(obs, np.ndarray):
+            obs = np.asarray(obs)
         obs = self._observation_fn(obs)
         return TimeStep(obs, info=info)
 
@@ -99,36 +79,10 @@ class GymWrapper(Env):
         if not isinstance(act, int):
             act = act.item()
         obs, reward, terminated, truncated, info = self._env.step(act)
+        if not isinstance(obs, np.ndarray):
+            obs = np.asarray(obs)
         obs = self._observation_fn(obs)
         return TimeStep(obs, reward, terminated, truncated, info)
 
     def close(self) -> None:
         self._env.close()
-
-
-class AtariWrapperFactory(EnvFactory):
-
-    def __init__(self,
-                 env_id: str,
-                 max_episode_steps: Optional[int] = None,
-                 episode_life: bool = False,
-                 clip_rewards: bool = False,
-                 frame_stack: bool = True,
-                 scale: bool = False) -> None:
-        self._env_id = env_id
-        self._max_episode_steps = max_episode_steps
-        self._episode_life = episode_life
-        self._clip_rewards = clip_rewards
-        self._frame_stack = frame_stack
-        self._scale = scale
-
-    def __call__(self, index: int, *args, **kwargs) -> Env:
-        env = atari_wrappers.make_atari(self._env_id)
-        env = GymWrapper(
-            ImageObservationWrapper(
-                atari_wrappers.wrap_deepmind(env, self._episode_life,
-                                             self._clip_rewards,
-                                             self._frame_stack, self._scale)))
-        if self._max_episode_steps is not None:
-            env = TimeLimitWrapper(env, self._max_episode_steps)
-        return env

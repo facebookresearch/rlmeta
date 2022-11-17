@@ -13,9 +13,9 @@ import hydra
 import torch
 import torch.multiprocessing as mp
 
-import rlmeta.envs.atari_wrappers as atari_wrappers
-import rlmeta.envs.gym_wrappers as gym_wrappers
+import rlmeta.envs.atari_wrapper as atari_wrapper
 import rlmeta.utils.hydra_utils as hydra_utils
+import rlmeta.utils.random_utils as random_utils
 import rlmeta.utils.remote_utils as remote_utils
 
 from examples.atari.ppo.atari_ppo_model import AtariPPOModel
@@ -34,9 +34,11 @@ from rlmeta.utils.optimizer_utils import get_optimizer
 
 @hydra.main(config_path="./conf", config_name="conf_ppo")
 def main(cfg):
+    if cfg.seed is not None:
+        random_utils.manual_seed(cfg.seed)
     logging.info(hydra_utils.config_to_json(cfg))
 
-    env = atari_wrappers.make_atari(cfg.env)
+    env = atari_wrapper.make_atari_env(**cfg.env)
     train_model = AtariPPOModel(env.action_space.n).to(cfg.train_device)
     infer_model = copy.deepcopy(train_model).to(cfg.infer_device)
     optimizer = get_optimizer(cfg.optimizer.name, train_model.parameters(),
@@ -49,7 +51,7 @@ def main(cfg):
     m_server = Server(cfg.m_server_name, cfg.m_server_addr)
     r_server = Server(cfg.r_server_name, cfg.r_server_addr)
     c_server = Server(cfg.c_server_name, cfg.c_server_addr)
-    m_server.add_service(RemotableModelPool(infer_model))
+    m_server.add_service(RemotableModelPool(infer_model, seed=cfg.seed))
     r_server.add_service(rb)
     c_server.add_service(ctrl)
     servers = ServerList([m_server, r_server, c_server])
@@ -70,16 +72,8 @@ def main(cfg):
     a_rb = make_remote_replay_buffer(rb, r_server, prefetch=cfg.prefetch)
     t_rb = make_remote_replay_buffer(rb, r_server)
 
-    env_fac = gym_wrappers.AtariWrapperFactory(
-        cfg.env, max_episode_steps=cfg.max_episode_steps)
+    env_fac = atari_wrapper.AtariWrapperFactory(**cfg.env)
 
-    agent = PPOAgent(a_model,
-                     replay_buffer=a_rb,
-                     controller=a_ctrl,
-                     optimizer=optimizer,
-                     batch_size=cfg.batch_size,
-                     learning_starts=cfg.get("learning_starts", None),
-                     model_push_period=cfg.model_push_period)
     t_agent_fac = AgentFactory(PPOAgent, t_model, replay_buffer=t_rb)
     e_agent_fac = AgentFactory(PPOAgent, e_model, deterministic_policy=False)
 
@@ -90,7 +84,7 @@ def main(cfg):
                           should_update=True,
                           num_rollouts=cfg.num_train_rollouts,
                           num_workers=cfg.num_train_workers,
-                          seed=cfg.train_seed)
+                          seed=cfg.seed)
     e_loop = ParallelLoop(env_fac,
                           e_agent_fac,
                           e_ctrl,
@@ -98,16 +92,25 @@ def main(cfg):
                           should_update=False,
                           num_rollouts=cfg.num_eval_rollouts,
                           num_workers=cfg.num_eval_workers,
-                          seed=cfg.eval_seed)
+                          seed=(None if cfg.seed is None else cfg.seed +
+                                cfg.num_train_rollouts))
     loops = LoopList([t_loop, e_loop])
+
+    learner = PPOAgent(a_model,
+                       replay_buffer=a_rb,
+                       controller=a_ctrl,
+                       optimizer=optimizer,
+                       batch_size=cfg.batch_size,
+                       learning_starts=cfg.learning_starts,
+                       model_push_period=cfg.model_push_period)
 
     servers.start()
     loops.start()
-    agent.connect()
+    learner.connect()
 
     start_time = time.perf_counter()
     for epoch in range(cfg.num_epochs):
-        stats = agent.train(cfg.steps_per_epoch)
+        stats = learner.train(cfg.steps_per_epoch)
         cur_time = time.perf_counter() - start_time
         info = f"T Epoch {epoch}"
         if cfg.table_view:
@@ -117,7 +120,7 @@ def main(cfg):
                 stats.json(info, phase="Train", epoch=epoch, time=cur_time))
         time.sleep(1)
 
-        stats = agent.eval(cfg.num_eval_episodes, keep_training_loops=True)
+        stats = learner.eval(cfg.num_eval_episodes, keep_training_loops=True)
         cur_time = time.perf_counter() - start_time
         info = f"E Epoch {epoch}"
         if cfg.table_view:
