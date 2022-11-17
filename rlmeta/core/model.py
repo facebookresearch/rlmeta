@@ -5,6 +5,7 @@
 
 import copy
 import functools
+import random
 
 from enum import IntEnum
 from typing import (Any, Awaitable, Callable, Dict, Optional, Sequence, Tuple,
@@ -19,6 +20,7 @@ import rlmeta.core.remote as remote
 import rlmeta.ops as rlmeta_ops
 import rlmeta.utils.data_utils as data_utils
 import rlmeta.utils.nested_utils as nested_utils
+import rlmeta.utils.random_utils as random_utils
 
 from rlmeta.core.launchable import Launchable
 from rlmeta.core.server import Server
@@ -50,11 +52,13 @@ class RemotableModelPool(remote.Remotable, Launchable):
     def __init__(self,
                  model: RemotableModel,
                  capacity: int = 0,
+                 seed: Optional[int] = None,
                  identifier: Optional[str] = None) -> None:
         super().__init__(identifier)
 
         self._model = model
         self._capacity = capacity
+        self._seed = seed
 
         if self._capacity > 0:
             self._history = CircularBuffer(self._capacity)
@@ -63,15 +67,22 @@ class RemotableModelPool(remote.Remotable, Launchable):
     def capacity(self) -> int:
         return self._capacity
 
+    @property
+    def seed(self) -> Optional[int]:
+        return self._seed
+
     def init_launching(self) -> None:
         self._model.share_memory()
 
     def init_execution(self) -> None:
         self._bind()
 
+        if self._seed is not None:
+            random_utils.manual_seed(self._seed)
+
     def model(self, version: int = ModelVersion.LATEST) -> nn.Module:
-        return self._model if version == ModelVersion.LATEST else self._history[
-            version][1]
+        return (self._model if version == ModelVersion.LATEST else
+                self._history[version][1])
 
     @remote.remote_method(batch_size=None)
     def pull(self,
