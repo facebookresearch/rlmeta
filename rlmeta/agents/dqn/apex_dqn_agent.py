@@ -57,7 +57,7 @@ class ApexDQNAgent(Agent):
         super().__init__()
 
         self._model = model
-        self._eps = torch.tensor([eps])
+        self._eps = torch.tensor([eps], dtype=torch.float32)
 
         self._replay_buffer = replay_buffer
         self._controller = controller
