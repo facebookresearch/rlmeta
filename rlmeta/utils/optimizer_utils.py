@@ -24,9 +24,8 @@ _NAME_TO_OPTIMIZER = {
 }
 
 
-def get_optimizer(
-        name: str,
-        params: Union[Iterable[torch.Tensor], Dict[str, torch.Tensor]],
-        args: Optional[Dict[str, Any]] = None) -> torch.optim.Optimizer:
-    optimizer = _NAME_TO_OPTIMIZER[name.lower()]
-    return optimizer(params) if args is None else optimizer(params, **args)
+def make_optimizer(params: Union[Iterable[torch.Tensor],
+                                 Dict[str, torch.Tensor]], name: str,
+                   **kwargs) -> torch.optim.Optimizer:
+    optimizer_cls = _NAME_TO_OPTIMIZER[name.lower()]
+    return optimizer_cls(params, **kwargs)

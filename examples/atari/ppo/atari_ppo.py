@@ -29,7 +29,7 @@ from rlmeta.core.replay_buffer import ReplayBuffer, make_remote_replay_buffer
 from rlmeta.core.server import Server, ServerList
 from rlmeta.samplers import UniformSampler
 from rlmeta.storage import TensorCircularBuffer
-from rlmeta.utils.optimizer_utils import get_optimizer
+from rlmeta.utils.optimizer_utils import make_optimizer
 
 
 @hydra.main(config_path="./conf", config_name="conf_ppo")
@@ -39,66 +39,73 @@ def main(cfg):
     logging.info(hydra_utils.config_to_json(cfg))
 
     env = atari_wrapper.make_atari_env(**cfg.env)
-    train_model = AtariPPOModel(env.action_space.n).to(cfg.train_device)
-    infer_model = copy.deepcopy(train_model).to(cfg.infer_device)
-    optimizer = get_optimizer(cfg.optimizer.name, train_model.parameters(),
-                              cfg.optimizer.args)
+    model = AtariPPOModel(env.action_space.n).to(cfg.train_device)
+    model_pool = RemotableModelPool(copy.deepcopy(model).to(cfg.infer_device),
+                                    seed=cfg.seed)
+    optimizer = make_optimizer(model.parameters(), **cfg.optimizer)
 
+    replay_buffer = ReplayBuffer(TensorCircularBuffer(cfg.replay_buffer_size),
+                                 UniformSampler())
     ctrl = Controller()
-    rb = ReplayBuffer(TensorCircularBuffer(cfg.replay_buffer_size),
-                      UniformSampler())
 
     m_server = Server(cfg.m_server_name, cfg.m_server_addr)
     r_server = Server(cfg.r_server_name, cfg.r_server_addr)
     c_server = Server(cfg.c_server_name, cfg.c_server_addr)
-    m_server.add_service(RemotableModelPool(infer_model, seed=cfg.seed))
-    r_server.add_service(rb)
+    m_server.add_service(model_pool)
+    r_server.add_service(replay_buffer)
     c_server.add_service(ctrl)
     servers = ServerList([m_server, r_server, c_server])
 
-    a_model = wrap_downstream_model(train_model, m_server)
-    t_model = make_remote_model(infer_model,
-                                m_server,
-                                version=ModelVersion.LATEST)
+    learner_model = wrap_downstream_model(model, m_server)
+    t_actor_model = make_remote_model(model,
+                                      m_server,
+                                      version=ModelVersion.LATEST)
     # During blocking evaluation we have STABLE is LATEST
-    e_model = make_remote_model(infer_model,
-                                m_server,
-                                version=ModelVersion.LATEST)
+    e_actor_model = make_remote_model(model,
+                                      m_server,
+                                      version=ModelVersion.LATEST)
 
-    a_ctrl = remote_utils.make_remote(ctrl, c_server)
-    t_ctrl = remote_utils.make_remote(ctrl, c_server)
-    e_ctrl = remote_utils.make_remote(ctrl, c_server)
+    learner_ctrl = remote_utils.make_remote(ctrl, c_server)
+    t_actor_ctrl = remote_utils.make_remote(ctrl, c_server)
+    e_actor_ctrl = remote_utils.make_remote(ctrl, c_server)
 
-    a_rb = make_remote_replay_buffer(rb, r_server, prefetch=cfg.prefetch)
-    t_rb = make_remote_replay_buffer(rb, r_server)
+    learner_replay_buffer = make_remote_replay_buffer(replay_buffer,
+                                                      r_server,
+                                                      prefetch=cfg.prefetch)
+    t_actor_replay_buffer = make_remote_replay_buffer(replay_buffer, r_server)
 
     env_fac = atari_wrapper.AtariWrapperFactory(**cfg.env)
 
-    t_agent_fac = AgentFactory(PPOAgent, t_model, replay_buffer=t_rb)
-    e_agent_fac = AgentFactory(PPOAgent, e_model, deterministic_policy=False)
+    t_agent_fac = AgentFactory(PPOAgent,
+                               t_actor_model,
+                               replay_buffer=t_actor_replay_buffer)
+    e_agent_fac = AgentFactory(
+        PPOAgent,
+        e_actor_model,
+        deterministic_policy=cfg.deterministic_evaluation)
 
     t_loop = ParallelLoop(env_fac,
                           t_agent_fac,
-                          t_ctrl,
+                          t_actor_ctrl,
                           running_phase=Phase.TRAIN,
                           should_update=True,
-                          num_rollouts=cfg.num_train_rollouts,
-                          num_workers=cfg.num_train_workers,
+                          num_rollouts=cfg.num_training_rollouts,
+                          num_workers=cfg.num_training_workers,
                           seed=cfg.seed)
     e_loop = ParallelLoop(env_fac,
                           e_agent_fac,
-                          e_ctrl,
+                          e_actor_ctrl,
                           running_phase=Phase.EVAL,
                           should_update=False,
-                          num_rollouts=cfg.num_eval_rollouts,
-                          num_workers=cfg.num_eval_workers,
+                          num_rollouts=cfg.num_evaluation_rollouts,
+                          num_workers=cfg.num_evaluation_workers,
                           seed=(None if cfg.seed is None else cfg.seed +
-                                cfg.num_train_rollouts))
+                                cfg.num_training_rollouts))
     loops = LoopList([t_loop, e_loop])
 
-    learner = PPOAgent(a_model,
-                       replay_buffer=a_rb,
-                       controller=a_ctrl,
+    learner = PPOAgent(learner_model,
+                       replay_buffer=learner_replay_buffer,
+                       controller=learner_ctrl,
                        optimizer=optimizer,
                        batch_size=cfg.batch_size,
                        learning_starts=cfg.learning_starts,
@@ -120,7 +127,8 @@ def main(cfg):
                 stats.json(info, phase="Train", epoch=epoch, time=cur_time))
         time.sleep(1)
 
-        stats = learner.eval(cfg.num_eval_episodes, keep_training_loops=True)
+        stats = learner.eval(cfg.num_evaluation_episodes,
+                             keep_training_loops=True)
         cur_time = time.perf_counter() - start_time
         info = f"E Epoch {epoch}"
         if cfg.table_view:
@@ -129,7 +137,7 @@ def main(cfg):
             logging.info(
                 stats.json(info, phase="Eval", epoch=epoch, time=cur_time))
 
-        torch.save(train_model.state_dict(), f"ppo_agent-{epoch}.pth")
+        torch.save(model.state_dict(), f"ppo_agent-{epoch}.pth")
         time.sleep(1)
 
     loops.terminate()

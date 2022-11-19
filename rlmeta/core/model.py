@@ -293,11 +293,13 @@ ModelLike = Union[nn.Module, RemotableModel, RemoteModel, DownstreamModel,
                   remote.Remote]
 
 
-def make_remote_model(model: RemotableModel,
+def make_remote_model(model: Union[RemotableModel, RemotableModelPool],
                       server: Server,
                       name: Optional[str] = None,
                       version: int = ModelVersion.LATEST,
                       timeout: float = 60) -> RemoteModel:
+    if isinstance(model, RemotableModelPool):
+        model = model.model()
     return RemoteModel(model, server.name, server.addr, name, version, timeout)
 
 

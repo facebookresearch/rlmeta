@@ -20,8 +20,11 @@ from rlmeta.envs.gym_wrapper import GymWrapper
 
 def make_atari_env(
         game: str,
+        mode: Optional[int] = None,
+        difficulty: Optional[int] = None,
         repeat_action_probability: float = 0.0,  # v4
         full_action_space: bool = False,
+        max_num_frames_per_episode: Optional[int] = None,
         render_mode: Optional[str] = None,
         noop_max: int = 30,
         frame_skip: int = 4,
@@ -31,15 +34,17 @@ def make_atari_env(
         grayscale_newaxis: bool = False,
         scale_obs: bool = False,
         clip_rewards: bool = False,
-        frame_stack: Optional[int] = 4,
-        max_episode_steps: Optional[int] = None) -> Env:
+        frame_stack: Optional[int] = 4) -> Env:
     game = "ALE/" + game + "-v5"
     env = gym.make(
         game,
-        obs_type="rgb",
-        frameskip=1,  # NoFrameskip
+        mode=mode,
+        difficulty=difficulty,
+        obs_type="rgb",  # Convert to grayscale in AtariPreprocessing
+        frameskip=1,  # NoFrameskip, max and skip in AtariPreprocessing
         repeat_action_probability=repeat_action_probability,
         full_action_space=full_action_space,
+        max_num_frames_per_episode=max_num_frames_per_episode,
         render_mode=render_mode)
 
     env = AtariPreprocessing(env,
@@ -57,9 +62,6 @@ def make_atari_env(
     if frame_stack is not None:
         env = FrameStack(env, frame_stack)
 
-    if max_episode_steps is not None:
-        env = TimeLimit(env, max_episode_steps)
-
     return GymWrapper(env)
 
 
@@ -68,8 +70,11 @@ class AtariWrapperFactory(EnvFactory):
     def __init__(
             self,
             game: str,
+            mode: Optional[int] = None,
+            difficulty: Optional[int] = None,
             repeat_action_probability: float = 0.0,  # v4
             full_action_space: bool = False,
+            max_num_frames_per_episode: Optional[int] = None,
             render_mode: Optional[str] = None,
             noop_max: int = 30,
             frame_skip: int = 4,
@@ -79,12 +84,14 @@ class AtariWrapperFactory(EnvFactory):
             grayscale_newaxis: bool = False,
             scale_obs: bool = False,
             clip_rewards: bool = False,
-            frame_stack: Optional[int] = 4,
-            max_episode_steps: Optional[int] = None) -> None:
+            frame_stack: Optional[int] = 4) -> None:
         # AtariEnv args.
         self._game = game
+        self._mode = mode
+        self._difficulty = difficulty
         self._repeat_action_probability = repeat_action_probability
         self._full_action_space = full_action_space
+        self._max_num_frames_per_episode = max_num_frames_per_episode
         self._render_mode = render_mode
 
         # AtariPreprocessing args.
@@ -99,13 +106,12 @@ class AtariWrapperFactory(EnvFactory):
         # Wrappers args.
         self._clip_rewards = clip_rewards
         self._frame_stack = frame_stack
-        self._max_episode_steps = max_episode_steps
 
     def __call__(self, index: int, *args, **kwargs) -> Env:
-        return make_atari_env(self._game, self._repeat_action_probability,
-                              self._full_action_space, self._render_mode,
-                              self._noop_max, self._frame_skip,
-                              self._screen_size, self._terminal_on_life_loss,
-                              self._grayscale_obs, self._grayscale_newaxis,
-                              self._scale_obs, self._clip_rewards,
-                              self._frame_stack, self._max_episode_steps)
+        return make_atari_env(
+            self._game, self._mode, self._difficulty,
+            self._repeat_action_probability, self._full_action_space,
+            self._max_num_frames_per_episode, self._render_mode, self._noop_max,
+            self._frame_skip, self._screen_size, self._terminal_on_life_loss,
+            self._grayscale_obs, self._grayscale_newaxis, self._scale_obs,
+            self._clip_rewards, self._frame_stack)
