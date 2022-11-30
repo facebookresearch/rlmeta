@@ -270,10 +270,10 @@ class ApexDQNAgent(Agent):
                 cur_reward.clamp_(-self._max_abs_reward, self._max_abs_reward)
                 nxt_reward.clamp_(-self._max_abs_reward, self._max_abs_reward)
 
+            gamma = 0.0 if nxt["terminated"] else self._gamma_pow[k]
+            r = cur_reward + self._gamma * r - gamma * nxt_reward
             if self._rescaler is not None:
                 nxt_v = self._rescaler.recover(nxt_v)
-            gamma = self._gamma_pow[k]
-            r = cur_reward + self._gamma * r - gamma * nxt_reward
             target = r + gamma * nxt_v
             if self._rescaler is not None:
                 target = self._rescaler.rescale(target)
@@ -472,12 +472,11 @@ class ConstantEpsFunc:
 
 class FlexibleEpsFunc:
 
-    def __init__(self, eps: float, num: int, alpha: float = 7.0) -> None:
+    def __init__(self, eps: float, num: int) -> None:
         self._eps = eps
         self._num = num
-        self._alpha = alpha
 
     def __call__(self, index: int) -> float:
         if self._num == 1:
             return self._eps
-        return self._eps**(1.0 + index / (self._num - 1) * self._alpha)
+        return self._eps**(3.0 - 2.0 * (index / (self._num - 1)))

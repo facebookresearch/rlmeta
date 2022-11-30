@@ -39,7 +39,8 @@ def main(cfg):
     logging.info(hydra_utils.config_to_json(cfg))
 
     env = atari_wrapper.make_atari_env(**cfg.env)
-    model = AtariPPORNDModel(env.action_space.n).to(cfg.train_device)
+    model = AtariPPORNDModel(env.action_space.n,
+                             network=cfg.network).to(cfg.train_device)
     model_pool = RemotableModelPool(copy.deepcopy(model).to(cfg.infer_device),
                                     seed=cfg.seed)
     optimizer = make_optimizer(model.parameters(), **cfg.optimizer)

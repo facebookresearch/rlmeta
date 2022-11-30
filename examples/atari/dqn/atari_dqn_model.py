@@ -14,49 +14,61 @@ import torch.nn.functional as F
 import rlmeta.core.remote as remote
 import rlmeta.utils.nested_utils as nested_utils
 
-from examples.atari.backbone import AtariBackbone
 from rlmeta.agents.dqn import DQNModel
 from rlmeta.core.types import NestedTensor
+from rlmeta.models.atari import NatureCNNBackbone, ImpalaCNNBackbone
+from rlmeta.models.dqn import DQNHead, DuelingDQNHead
 
 
 class AtariDQNNet(nn.Module):
 
-    def __init__(self, action_dim: int, dueling_dqn: bool = True) -> None:
+    def __init__(self,
+                 num_actions: int,
+                 network="nature",
+                 dueling_dqn: bool = True) -> None:
         super().__init__()
-        self._action_dim = action_dim
+        self._num_actions = num_actions
+        self._network = network.lower()
         self._dueling_dqn = dueling_dqn
 
-        self._backbone = AtariBackbone()
-        self._linear_a = nn.Linear(self._backbone.output_dim, action_dim)
-        self._linear_v = nn.Linear(self._backbone.output_dim,
-                                   1) if dueling_dqn else None
+        head_cls = DuelingDQNHead if dueling_dqn else DQNHead
+        if self._network == "nature":
+            self._backbone = NatureCNNBackbone()
+            self._head = head_cls(self._backbone.output_size, [512],
+                                  num_actions)
+        elif self._network == "impala":
+            self._backbone = ImpalaCNNBackbone()
+            self._head = head_cls(self._backbone.output_size, [256],
+                                  num_actions)
+        else:
+            assert False, "Unsupported network."
 
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
         x = observation.float() / 255.0
         h = self._backbone(x)
-        a = self._linear_a(h)
-        if self._dueling_dqn:
-            v = self._linear_v(h)
-            return v + a - a.mean(-1, keepdim=True)
-        else:
-            return a
+        a = self._head(h)
+        return a
 
 
 class AtariDQNModel(DQNModel):
 
     def __init__(self,
-                 action_dim: int,
+                 num_actions: int,
+                 network: str = "nature",
                  dueling_dqn: bool = True,
                  double_dqn: bool = False) -> None:
         super().__init__()
 
-        self._action_dim = action_dim
+        self._num_actions = num_actions
+        self._network = network.lower()
         self._dueling_dqn = dueling_dqn
         self._double_dqn = double_dqn
 
         # Bootstrapping with online network when double_dqn = False.
         # https://arxiv.org/pdf/2209.07550.pdf
-        self._online_net = AtariDQNNet(action_dim, dueling_dqn)
+        self._online_net = AtariDQNNet(num_actions,
+                                       network=network,
+                                       dueling_dqn=dueling_dqn)
         self._target_net = copy.deepcopy(
             self._online_net) if double_dqn else None
 

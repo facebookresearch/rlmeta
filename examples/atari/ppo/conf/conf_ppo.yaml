@@ -13,7 +13,8 @@ infer_device: "cuda:1"
 
 env:
   game: "Pong"
-  repeat_action_probability: 0.0  # v4
+  repeat_action_probability: 0.25  # sticky actions
+  full_action_space: True
   max_num_frames_per_episode: 50000
 
 seed: null
@@ -33,6 +34,9 @@ optimizer:
   lr: 3e-4
   eps: 1e-8
 
+gamma: 0.99
+
+network: "nature"
 learning_starts: 65536
 model_push_period: 10
 
