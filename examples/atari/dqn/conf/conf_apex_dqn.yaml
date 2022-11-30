@@ -41,7 +41,7 @@ double_dqn: False
 target_sync_period: null
 
 gamma: 0.99
-n_step: 3
+n_step: 5
 
 batch_size: 512
 learning_starts: 65536
