@@ -471,6 +471,9 @@ class ConstantEpsFunc:
 
 
 class FlexibleEpsFunc:
+    """
+    Eps function following https://arxiv.org/pdf/1805.11593.pdf.
+    """
 
     def __init__(self, eps: float, num: int) -> None:
         self._eps = eps
