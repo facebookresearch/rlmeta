@@ -8,6 +8,23 @@ from typing import Sequence
 import torch
 import torch.nn as nn
 
+# The MLP class is inspired from the MLP class in DeepMind's haiku lib.
+# https://github.com/deepmind/dm-haiku/blob/6f2769e8c8dd35b3fc0e66905c877debea7d525f/haiku/_src/nets/mlp.py#L38
+
+# Copyright 2019 DeepMind Technologies Limited. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 
 class MLP(nn.Module):
 
