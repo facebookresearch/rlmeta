@@ -39,6 +39,7 @@ def main(cfg):
 
     env = atari_wrapper.make_atari_env(**cfg.env)
     model = AtariDQNModel(env.action_space.n,
+                          network=cfg.network,
                           double_dqn=cfg.double_dqn).to(cfg.train_device)
     model_pool = RemotableModelPool(copy.deepcopy(model).to(cfg.infer_device),
                                     seed=cfg.seed)
@@ -82,6 +83,7 @@ def main(cfg):
                                           cfg.eps, cfg.num_training_rollouts),
                                       replay_buffer=t_actor_replay_buffer,
                                       n_step=cfg.n_step,
+                                      gamma=cfg.gamma,
                                       max_abs_reward=cfg.max_abs_reward,
                                       rescale_value=cfg.rescale_value)
     e_agent_fac = ApexDQNAgentFactory(e_actor_model,
@@ -113,6 +115,7 @@ def main(cfg):
         optimizer=optimizer,
         batch_size=cfg.batch_size,
         n_step=cfg.n_step,
+        gamma=cfg.gamma,
         importance_sampling_exponent=cfg.importance_sampling_exponent,
         value_clipping_eps=cfg.value_clipping_eps,
         target_sync_period=cfg.target_sync_period,

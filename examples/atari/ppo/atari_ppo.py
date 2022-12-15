@@ -39,7 +39,8 @@ def main(cfg):
     logging.info(hydra_utils.config_to_json(cfg))
 
     env = atari_wrapper.make_atari_env(**cfg.env)
-    model = AtariPPOModel(env.action_space.n).to(cfg.train_device)
+    model = AtariPPOModel(env.action_space.n,
+                          network=cfg.network).to(cfg.train_device)
     model_pool = RemotableModelPool(copy.deepcopy(model).to(cfg.infer_device),
                                     seed=cfg.seed)
     optimizer = make_optimizer(model.parameters(), **cfg.optimizer)
@@ -78,7 +79,8 @@ def main(cfg):
 
     t_agent_fac = AgentFactory(PPOAgent,
                                t_actor_model,
-                               replay_buffer=t_actor_replay_buffer)
+                               replay_buffer=t_actor_replay_buffer,
+                               gamma=cfg.gamma)
     e_agent_fac = AgentFactory(
         PPOAgent,
         e_actor_model,
@@ -108,6 +110,7 @@ def main(cfg):
                        controller=learner_ctrl,
                        optimizer=optimizer,
                        batch_size=cfg.batch_size,
+                       gamma=cfg.gamma,
                        learning_starts=cfg.learning_starts,
                        model_push_period=cfg.model_push_period)
 

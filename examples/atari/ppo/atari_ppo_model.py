@@ -7,29 +7,36 @@ from typing import Tuple
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 import rlmeta.core.remote as remote
 
-from examples.atari.backbone import AtariBackbone
 from rlmeta.agents.ppo import PPOModel
+from rlmeta.models.actor_critic import DiscreteActorCriticHead
+from rlmeta.models.atari import NatureCNNBackbone, ImpalaCNNBackbone
 
 
 class AtariPPOModel(PPOModel):
 
-    def __init__(self, action_dim: int) -> None:
+    def __init__(self, num_actions: int, network: str = "nature") -> None:
         super().__init__()
-        self.action_dim = action_dim
-        self.backbone = AtariBackbone()
-        self.linear_p = nn.Linear(self.backbone.output_dim, self.action_dim)
-        self.linear_v = nn.Linear(self.backbone.output_dim, 1)
+        self._num_actions = num_actions
+        self._network = network.lower()
+
+        if self._network == "nature":
+            self._backbone = NatureCNNBackbone()
+            self._head = DiscreteActorCriticHead(self._backbone.output_size,
+                                                 [512], num_actions)
+        elif self._network == "impala":
+            self._backbone = ImpalaCNNBackbone()
+            self._head = DiscreteActorCriticHead(self._backbone.output_size,
+                                                 [256], num_actions)
+        else:
+            assert False, "Unsupported network."
 
     def forward(self, obs: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         x = obs.float() / 255.0
-        h = self.backbone(x)
-        p = self.linear_p(h)
-        logpi = F.log_softmax(p, dim=-1)
-        v = self.linear_v(h)
+        h = self._backbone(x)
+        logpi, v = self._head(h)
         return logpi, v
 
     @remote.remote_method(batch_size=128)

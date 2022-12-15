@@ -13,8 +13,9 @@ infer_device: "cuda:1"
 
 env:
   game: "Pong"
-  repeat_action_probability: 0.0  # v4
-  max_num_frames_per_episode: 50000
+  repeat_action_probability: 0.25  # sticky actions
+  full_action_space: True
+  max_num_frames_per_episode: 108000
 
 seed: null
 table_view: False
@@ -23,7 +24,7 @@ table_view: False
 num_training_rollouts: 32
 num_training_workers: 16
 
-eps: 0.4
+eps: 0.1
 
 replay_buffer_size: 1000000
 priority_exponent: 0.6
@@ -31,21 +32,24 @@ prefetch: 2
 
 importance_sampling_exponent: 0.4
 
-max_abs_reward: 1
-rescale_value: False
+max_abs_reward: null
+rescale_value: True
 value_clipping_eps: 0.2
 
-double_dqn: True
-target_sync_period: 2500
+network: "nature"
+double_dqn: False
+target_sync_period: null
+
+gamma: 0.99
+n_step: 5
 
 batch_size: 512
-n_step: 3
 learning_starts: 65536
 model_push_period: 10
 
 optimizer:
   name: "Adam"
-  lr: 1e-4
+  lr: 3e-4
   eps: 1e-8
 
 num_epochs: 1000
@@ -57,4 +61,4 @@ num_evaluation_episodes: 10
 num_evaluation_rollouts: 4
 num_evaluation_workers: 2
 
-evaluation_eps: 0.05
+evaluation_eps: 1e-3

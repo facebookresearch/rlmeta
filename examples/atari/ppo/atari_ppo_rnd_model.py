@@ -11,37 +11,42 @@ import torch.nn.functional as F
 
 import rlmeta.core.remote as remote
 
-from examples.atari.backbone import AtariBackbone
 from rlmeta.agents.ppo import PPORNDModel
-from rlmeta.core.rescalers import MomentsRescaler
 from rlmeta.core.types import NestedTensor
+from rlmeta.models.actor_critic import DiscreteActorCriticRNDHead
+from rlmeta.models.atari import NatureCNNBackbone, ImpalaCNNBackbone
 
 
 class AtariPPORNDModel(PPORNDModel):
 
-    def __init__(self, action_dim: int) -> None:
+    def __init__(self, num_actions: int, network: str = "nature") -> None:
         super().__init__()
 
-        self.action_dim = action_dim
+        self._num_actions = num_actions
+        self._network = network.lower()
 
-        self.ppo_net = AtariBackbone()
-        self.tgt_net = AtariBackbone()
-        self.prd_net = AtariBackbone()
+        if self._network == "nature":
+            self._ppo_net = NatureCNNBackbone()
+            self._tgt_net = NatureCNNBackbone()
+            self._prd_net = NatureCNNBackbone()
+            self._head = DiscreteActorCriticRNDHead(self._ppo_net.output_size,
+                                                    [512], num_actions)
 
-        self.linear_p = nn.Linear(self.ppo_net.output_dim, self.action_dim)
-        self.linear_ext_v = nn.Linear(self.ppo_net.output_dim, 1)
-        self.linear_int_v = nn.Linear(self.ppo_net.output_dim, 1)
+        elif self._network == "impala":
+            self._ppo_net = ImpalaCNNBackbone()
+            self._tgt_net = ImpalaCNNBackbone()
+            self._prd_net = ImpalaCNNBackbone()
+            self._head = DiscreteActorCriticRNDHead(self._ppo_net.output_size,
+                                                    [256], num_actions)
+        else:
+            assert False, "Unsupported network."
 
     def forward(
             self, obs: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         x = obs.float() / 255.0
-        h = self.ppo_net(x)
-        p = self.linear_p(h)
-        logpi = F.log_softmax(p, dim=-1)
-        ext_v = self.linear_ext_v(h)
-        int_v = self.linear_int_v(h)
-
+        h = self._ppo_net(x)
+        logpi, ext_v, int_v = self._head(h)
         return logpi, ext_v, int_v
 
     @remote.remote_method(batch_size=128)
@@ -68,7 +73,7 @@ class AtariPPORNDModel(PPORNDModel):
     def _rnd_error(self, obs: torch.Tensor) -> torch.Tensor:
         x = obs.float() / 255.0
         with torch.no_grad():
-            tgt = self.tgt_net(x)
-        prd = self.prd_net(x)
+            tgt = self._tgt_net(x)
+        prd = self._prd_net(x)
         err = (prd - tgt).square().mean(-1, keepdim=True)
         return err
