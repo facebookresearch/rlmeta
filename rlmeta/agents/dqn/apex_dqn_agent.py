@@ -475,11 +475,13 @@ class FlexibleEpsFunc:
     Eps function following https://arxiv.org/pdf/1805.11593.pdf.
     """
 
-    def __init__(self, eps: float, num: int) -> None:
+    def __init__(self, eps: float, num: int, alpha: float = 7.0) -> None:
         self._eps = eps
         self._num = num
+        self._alpha = alpha
 
     def __call__(self, index: int) -> float:
         if self._num == 1:
             return self._eps
-        return self._eps**(3.0 - 2.0 * (index / (self._num - 1)))
+        # return self._eps**(3.0 - 2.0 * (index / (self._num - 1)))
+        return self._eps**(1.0 + self._alpha * (index / (self._num - 1)))

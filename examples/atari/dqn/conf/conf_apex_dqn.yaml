@@ -24,7 +24,7 @@ table_view: False
 num_training_rollouts: 32
 num_training_workers: 16
 
-eps: 0.1
+eps: 0.4
 
 replay_buffer_size: 1000000
 priority_exponent: 0.6
