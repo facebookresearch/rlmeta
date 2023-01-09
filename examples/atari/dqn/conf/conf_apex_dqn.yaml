@@ -35,6 +35,7 @@ importance_sampling_exponent: 0.4
 max_abs_reward: null
 rescale_value: True
 value_clipping_eps: 0.2
+fr_kappa: 1.0
 
 network: "nature"
 double_dqn: False
@@ -44,6 +45,7 @@ gamma: 0.99
 n_step: 5
 
 batch_size: 512
+max_grad_norm: 40.0
 learning_starts: 65536
 model_push_period: 10
 

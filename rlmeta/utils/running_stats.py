@@ -102,3 +102,32 @@ class RunningMoments(nn.Module):
             self._m1 += c * delta
             self._m2 += m0 * m2 + delta.square() * (c * self._m0)
             self._m0 = n
+
+
+class RunningTDError(nn.Module):
+
+    def __init__(self,
+                 size: Union[int, Tuple[int]],
+                 dtype: Optional[torch.dtype] = None) -> None:
+        super().__init__()
+        self._running_gamma = RunningMoments(size, dtype)
+        self._running_r = RunningMoments(size, dtype)
+        self._running_g = RunningRMS(size, dtype)
+
+    def reset(self) -> None:
+        self._running_gamma.reset()
+        self._running_r.reset()
+        self._running_g.reset()
+
+    def var(self) -> torch.Tensor:
+        return (self._running_r.var() +
+                self._running_gamma.var() * self._running_g.mean_square())
+
+    def std(self) -> torch.Tensor:
+        return self.var().sqrt()
+
+    def update(self, gamma: torch.Tensor, r: torch.Tensor,
+               g: torch.Tensor) -> None:
+        self._running_gamma.update(gamma)
+        self._running_r.update(r)
+        self._running_g.update(g)

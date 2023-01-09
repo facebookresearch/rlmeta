@@ -22,7 +22,7 @@ def make_atari_env(
         game: str,
         mode: Optional[int] = None,
         difficulty: Optional[int] = None,
-        repeat_action_probability: float = 0.0,  # v4
+        repeat_action_probability: float = 0.25,  # sticky actions
         full_action_space: bool = False,
         max_num_frames_per_episode: Optional[int] = None,
         render_mode: Optional[str] = None,

@@ -25,6 +25,7 @@ from rlmeta.core.rescalers import SqrtRescaler
 from rlmeta.core.types import Action, TimeStep
 from rlmeta.core.types import NestedTensor
 from rlmeta.utils.stats_dict import StatsDict
+from rlmeta.utils.running_stats import RunningMoments
 
 console = Console()
 
@@ -46,6 +47,7 @@ class ApexDQNAgent(Agent):
         max_abs_reward: Optional[int] = None,
         rescale_value: bool = False,
         value_clipping_eps: Optional[float] = 0.2,
+        fr_kappa: Optional[float] = 1.0,
         target_sync_period: Optional[int] = None,
         learning_starts: Optional[int] = None,
         model_push_period: int = 10,
@@ -72,6 +74,7 @@ class ApexDQNAgent(Agent):
         self._importance_sampling_exponent = importance_sampling_exponent
         self._max_abs_reward = max_abs_reward
         self._value_clipping_eps = value_clipping_eps
+        self._fr_kappa = fr_kappa
 
         self._rescale_value = rescale_value
         self._rescaler = SqrtRescaler() if rescale_value else None
@@ -89,6 +92,8 @@ class ApexDQNAgent(Agent):
         self._trajectory = []
         self._update_priorities_future = None
         self._eval_executor = None
+
+        self._running_td_error = None
 
     def reset(self) -> None:
         self._step_counter = 0
@@ -352,24 +357,52 @@ class ApexDQNAgent(Agent):
             keys, priorities)
 
         return {
+            "target": target.detach().mean().item(),
             "td_error": td_err.detach().mean().item(),
             "loss": loss.detach().mean().item(),
             "grad_norm": grad_norm.detach().mean().item(),
+            # "td_error_std": self._running_td_error.std().detach().item(),
         }
 
     def _loss(self, target: torch.Tensor, q: torch.Tensor,
               behavior_q: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
         if self._value_clipping_eps is None:
-            return (F.mse_loss(q, target, reduction="none").squeeze(-1) *
-                    weight).mean()
+            loss = F.mse_loss(q, target, reduction="none")
+            if self._fr_kappa is not None:
+                # Apply functional regularization.
+                # https://arxiv.org/pdf/2106.02613.pdf
+                loss += (self._fr_kappa *
+                         F.mse_loss(q, behavior_q, reduction="none"))
+            return (loss.squeeze(-1) * weight).mean()
 
         # Apply approximate trust region value update.
         # https://arxiv.org/pdf/2209.07550.pdf
+
+        # if self._running_td_error is None:
+        #     self._running_td_error = RunningMoments(size=1, dtype=torch.float64)
+        #     self._running_td_error.to(target.device)
+        #
+        # with torch.no_grad():
+        #     td_error = target - q.detach()
+        #     self._running_td_error.update(td_error)
+        #     std = self._running_td_error.std().to(td_error.dtype)
+        #     std = torch.maximum(std, td_error.std(unbiased=False))
+        #     std.clamp_(0.01)
+        # value_clipping_eps = self._value_clipping_eps * std
+        # clipped_q = behavior_q + torch.clamp(
+        #     q - behavior_q, -value_clipping_eps, value_clipping_eps)
         clipped_q = behavior_q + torch.clamp(
             q - behavior_q, -self._value_clipping_eps, self._value_clipping_eps)
         err1 = F.mse_loss(q, target, reduction="none")
         err2 = F.mse_loss(clipped_q, target, reduction="none")
-        return (torch.max(err1, err2).squeeze(-1) * weight).mean()
+        loss = torch.maximum(err1, err2)
+
+        if self._fr_kappa is not None:
+            # Apply functional regularization.
+            # https://arxiv.org/pdf/2106.02613.pdf
+            loss += (self._fr_kappa *
+                     F.mse_loss(q, behavior_q, reduction="none"))
+        return (loss.squeeze(-1) * weight).mean()
 
     def _eval(self,
               num_episodes: int,
@@ -406,6 +439,7 @@ class ApexDQNAgentFactory(AgentFactory):
         max_abs_reward: Optional[int] = None,
         rescale_value: bool = False,
         value_clipping_eps: Optional[float] = 0.2,
+        fr_kappa: Optional[float] = 1.0,
         target_sync_period: Optional[int] = None,
         learning_starts: Optional[int] = None,
         model_push_period: int = 10,
@@ -427,6 +461,7 @@ class ApexDQNAgentFactory(AgentFactory):
         self._max_abs_reward = max_abs_reward
         self._rescale_value = rescale_value
         self._value_clipping_eps = value_clipping_eps
+        self._fr_kappa = fr_kappa
         self._target_sync_period = target_sync_period
         self._learning_starts = learning_starts
         self._model_push_period = model_push_period
@@ -453,6 +488,7 @@ class ApexDQNAgentFactory(AgentFactory):
             self._max_abs_reward,
             self._rescale_value,
             self._value_clipping_eps,
+            self._fr_kappa,
             self._target_sync_period,
             self._learning_starts,
             self._model_push_period,

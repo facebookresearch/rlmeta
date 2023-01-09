@@ -46,6 +46,9 @@ class RemotableModel(nn.Module, remote.Remotable):
     def device(self) -> torch.device:
         return next(self.parameters()).device
 
+    def init_model(self) -> None:
+        pass
+
 
 class RemotableModelPool(remote.Remotable, Launchable):
 
@@ -79,6 +82,9 @@ class RemotableModelPool(remote.Remotable, Launchable):
 
         if self._seed is not None:
             random_utils.manual_seed(self._seed)
+
+        self._model.init_model()
+        print(self._model)
 
     def model(self, version: int = ModelVersion.LATEST) -> nn.Module:
         return (self._model if version == ModelVersion.LATEST else

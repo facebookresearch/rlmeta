@@ -43,6 +43,10 @@ class AtariDQNNet(nn.Module):
         else:
             assert False, "Unsupported network."
 
+    def init_model(self) -> None:
+        nn.utils.parametrizations.spectral_norm(self._head._mlp_a._layers[-3])
+        nn.utils.parametrizations.spectral_norm(self._head._mlp_v._layers[-3])
+
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
         x = observation.float() / 255.0
         h = self._backbone(x)
@@ -72,6 +76,11 @@ class AtariDQNModel(DQNModel):
         self._target_net = copy.deepcopy(
             self._online_net) if double_dqn else None
 
+    def init_model(self) -> None:
+        self._online_net.init_model()
+        if self._target_net is not None:
+            self._target_net.init_model()
+
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
         return self._online_net(observation)
 
@@ -80,7 +89,7 @@ class AtariDQNModel(DQNModel):
         q = q.gather(dim=-1, index=a)
         return q
 
-    @remote.remote_method(batch_size=128)
+    @remote.remote_method(batch_size=256)
     def act(self, observation: torch.Tensor,
             eps: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
         with torch.no_grad():
@@ -88,9 +97,11 @@ class AtariDQNModel(DQNModel):
             _, action_dim = q.size()
             greedy_action = q.argmax(-1, keepdim=True)
 
-            pi = torch.ones_like(q) * (eps / (action_dim - 1))
-            pi.scatter_(dim=-1, index=greedy_action, src=1.0 - eps)
-            action = pi.multinomial(1, replacement=True)
+            pi = torch.ones_like(q) * (eps / action_dim)
+            pi.scatter_(dim=-1,
+                        index=greedy_action,
+                        src=1.0 - eps * (action_dim - 1) / action_dim)
+            action = pi.multinomial(1)
             v = self._value(observation, q)
             q = q.gather(dim=-1, index=action)
 
