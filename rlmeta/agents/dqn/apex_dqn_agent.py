@@ -204,6 +204,7 @@ class ApexDQNAgent(Agent):
             t0 = time.perf_counter()
             keys, batch, probabilities = self._replay_buffer.sample(
                 self._batch_size)
+                # self._batch_size, replacement=True)
             t1 = time.perf_counter()
             step_stats = self._train_step(keys, batch, probabilities)
             t2 = time.perf_counter()
@@ -305,21 +306,25 @@ class ApexDQNAgent(Agent):
             batch.clear()
 
     async def _async_send_replay(self, replay: List[NestedTensor]) -> None:
-        batch = []
-        while replay:
-            batch.append(replay.pop())
-            if len(batch) >= self._local_batch_size:
-                b = nested_utils.collate_nested(self._collate_fn, batch)
-                priorities = await self._model.async_compute_priority(
-                    b["obs"], b["action"], b["target"])
-                await self._replay_buffer.async_extend(batch, priorities)
-                batch.clear()
-        if batch:
-            b = nested_utils.collate_nested(self._collate_fn, batch)
-            priorities = await self._model.async_compute_priority(
-                b["obs"], b["action"], b["target"])
-            await self._replay_buffer.async_extend(batch, priorities)
-            batch.clear()
+        batch = nested_utils.collate_nested(self._collate_fn, replay)
+        priorities = (batch["target"] - batch["q"]).abs().squeeze(-1)
+        await self._replay_buffer.async_extend(batch, priorities, stacked=True)
+
+        # batch = []
+        # while replay:
+        #     batch.append(replay.pop())
+        #     if len(batch) >= self._local_batch_size:
+        #         b = nested_utils.collate_nested(self._collate_fn, batch)
+        #         priorities = await self._model.async_compute_priority(
+        #             b["obs"], b["action"], b["target"])
+        #         await self._replay_buffer.async_extend(batch, priorities)
+        #         batch.clear()
+        # if batch:
+        #     b = nested_utils.collate_nested(self._collate_fn, batch)
+        #     priorities = await self._model.async_compute_priority(
+        #         b["obs"], b["action"], b["target"])
+        #     await self._replay_buffer.async_extend(batch, priorities)
+        #     batch.clear()
 
     def _train_step(self, keys: torch.Tensor, batch: NestedTensor,
                     probabilities: torch.Tensor) -> Dict[str, float]:

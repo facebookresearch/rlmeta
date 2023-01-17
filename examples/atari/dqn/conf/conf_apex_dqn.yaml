@@ -41,7 +41,7 @@ network: "nature"
 double_dqn: False
 target_sync_period: null
 
-gamma: 0.99
+gamma: 0.997
 n_step: 5
 
 batch_size: 512
@@ -51,7 +51,7 @@ model_push_period: 10
 
 optimizer:
   name: "Adam"
-  lr: 3e-4
+  lr: 1e-4
   eps: 1e-8
 
 num_epochs: 1000
