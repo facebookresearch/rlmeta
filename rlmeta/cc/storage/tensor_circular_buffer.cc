@@ -156,7 +156,7 @@ void LoadNested(const Schema& schema, const py::object& src,
 std::pair<int64_t, std::optional<int64_t>> TensorCircularBuffer::Append(
     const py::object& o) {
   if (!initialized_) {
-    Init(o);
+    Init(o, /*stacked=*/false);
   }
   const auto ret = Reserve();
   const int64_t index = key_to_index_.at(ret.first);
@@ -169,11 +169,44 @@ std::pair<int64_t, std::optional<int64_t>> TensorCircularBuffer::Append(
   return ret;
 }
 
+std::pair<py::array_t<int64_t>, py::array_t<int64_t>>
+TensorCircularBuffer::ExtendStacked(const py::object& src) {
+  if (!initialized_) {
+    Init(src, /*stacked=*/true);
+  }
+  const int64_t m = schema_.size();
+  std::vector<torch::Tensor> src_data(m);
+  FlattenNested(schema_, src, src_data);
+  const int64_t n = src_data[0].size(0);
+  const auto [new_keys, old_keys] = Reserve(n);
+
+  {
+    py::gil_scoped_release release;
+    std::vector<int64_t> indices;
+    indices.reserve(n);
+    for (int64_t i = 0; i < n; ++i) {
+      const auto it = key_to_index_.find(new_keys[i]);
+      if (it != key_to_index_.end()) {
+        indices.push_back(it->second);
+      }
+    }
+    const torch::Tensor indices_tensor = torch::from_blob(
+        indices.data(), {static_cast<int64_t>(indices.size())}, torch::kInt64);
+    for (int64_t i = 0; i < m; ++i) {
+      data_[i].index_put_({indices_tensor, "..."}, src_data[i]);
+    }
+  }
+
+  return std::make_pair<py::array_t<int64_t>, py::array_t<int64_t>>(
+      utils::AsNumpyArray<int64_t>(std::move(new_keys)),
+      utils::AsNumpyArray<int64_t>(std::move(old_keys)));
+}
+
 void TensorCircularBuffer::LoadData(const py::object& data,
                                     const py::array_t<int64_t>& keys,
                                     int64_t cursor, int64_t next_key) {
   Reset();
-  schema_.FromPython(data, /*packed_input=*/true);
+  schema_.FromPython(data, /*stacked=*/true);
   initialized_ = true;
   data_.resize(schema_.size());
   LoadNested(schema_, data, data_);
@@ -186,8 +219,8 @@ void TensorCircularBuffer::LoadData(const py::object& data,
   next_key_ = next_key;
 }
 
-void TensorCircularBuffer::Init(const py::object& o) {
-  schema_.FromPython(o);
+void TensorCircularBuffer::Init(const py::object& o, bool stacked) {
+  schema_.FromPython(o, stacked);
   data_.resize(schema_.size());
   ReserveTensors(schema_, capacity_, data_);
   initialized_ = true;
@@ -304,7 +337,7 @@ template <class Sequence>
 std::pair<py::array_t<int64_t>, py::array_t<int64_t>>
 TensorCircularBuffer::ExtendImpl(const Sequence& src) {
   if (!initialized_) {
-    Init(src[0]);
+    Init(src[0], /*stacked=*/false);
   }
   const int64_t n = src.size();
   const int64_t m = schema_.size();
@@ -374,6 +407,7 @@ void DefineTensorCircularBuffer(py::module& m) {
            py::overload_cast<const py::tuple&>(&TensorCircularBuffer::Extend))
       .def("extend",
            py::overload_cast<const py::list&>(&TensorCircularBuffer::Extend))
+      .def("extend_stacked", &TensorCircularBuffer::ExtendStacked)
       .def(py::pickle(
           [](const TensorCircularBuffer& buffer) {
             if (buffer.initialized()) {

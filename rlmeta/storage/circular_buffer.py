@@ -8,6 +8,7 @@ from typing import Callable, Optional, Sequence, Tuple, Union
 import numpy as np
 
 import rlmeta.utils.nested_utils as nested_utils
+import rlmeta.utils.data_utils as data_utils
 import _rlmeta_extension
 
 from rlmeta.core.types import NestedTensor, Tensor
@@ -74,5 +75,9 @@ class CircularBuffer(Storage):
         return self._impl.append(data)
 
     def extend(self,
-               data: Sequence[NestedTensor]) -> Tuple[np.ndarray, np.ndarray]:
+               data: Union[NestedTensor, Sequence[NestedTensor]],
+               stacked: bool = False) -> Tuple[np.ndarray, np.ndarray]:
+        if stacked:
+            batch_size = nested_utils.first(data).size(0)
+            data = data_utils.unstack_fields(data, batch_size)
         return self._impl.extend(data)

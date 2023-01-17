@@ -58,5 +58,9 @@ class TensorCircularBuffer(Storage):
         return self._impl.append(data)
 
     def extend(self,
-               data: Sequence[NestedTensor]) -> Tuple[np.ndarray, np.ndarray]:
-        return self._impl.extend(data)
+               data: Union[NestedTensor, Sequence[NestedTensor]],
+               stacked: bool = False) -> Tuple[np.ndarray, np.ndarray]:
+        if stacked:
+            return self._impl.extend_stacked(data)
+        else:
+            return self._impl.extend(data)
