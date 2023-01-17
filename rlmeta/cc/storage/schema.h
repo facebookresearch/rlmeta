@@ -40,13 +40,13 @@ class Schema {
     return map_;
   }
 
-  bool FromPython(const py::object& obj, bool packed_input = false) {
+  bool FromPython(const py::object& obj, bool stacked) {
     int64_t index = 0;
-    return FromPythonImpl(obj, packed_input, index);
+    return FromPythonImpl(obj, stacked, index);
   }
 
  protected:
-  bool FromPythonImpl(const py::object& obj, bool packed_input, int64_t& index);
+  bool FromPythonImpl(const py::object& obj, bool stacked, int64_t& index);
 
   int64_t size_ = 0;
   std::optional<MetaData> meta_ = std::nullopt;
