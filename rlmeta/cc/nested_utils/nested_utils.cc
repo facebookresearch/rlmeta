@@ -173,6 +173,22 @@ py::tuple UnbatchNestedImpl(std::function<py::tuple(const py::object&)> func,
 
 }  // namespace
 
+py::object First(const py::object& obj) {
+  if (py::isinstance<py::tuple>(obj)) {
+    const py::tuple src = py::reinterpret_borrow<py::tuple>(obj);
+    return First(src[0]);
+  }
+  if (py::isinstance<py::list>(obj)) {
+    const py::list src = py::reinterpret_borrow<py::list>(obj);
+    return First(src[0]);
+  }
+  if (py::isinstance<py::dict>(obj)) {
+    const py::dict src = py::reinterpret_borrow<py::dict>(obj);
+    return First(py::reinterpret_borrow<py::object>(src.begin()->second));
+  }
+  return obj;
+}
+
 py::tuple FlattenNested(const py::object& obj) {
   std::vector<py::object> flattened;
   VisitNestedImpl(
@@ -212,6 +228,7 @@ void DefineNestedUtils(py::module& m) {
       "nested_utils", "nested_utils submodule of \"_rlmeta_extension\"");
 
   sub.def("flatten_nested", &nested_utils::FlattenNested)
+      .def("first", &nested_utils::First)
       .def("map_nested", &nested_utils::MapNested)
       .def("collate_nested",
            py::overload_cast<std::function<py::object(const py::tuple&)>,

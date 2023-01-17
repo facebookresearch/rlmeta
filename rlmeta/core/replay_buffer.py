@@ -111,8 +111,9 @@ class ReplayBuffer(remote.Remotable, Launchable):
     @remote.remote_method(batch_size=None)
     def extend(self,
                data: Sequence[NestedTensor],
-               priorities: Union[float, Tensor] = 1.0) -> torch.Tensor:
-        new_keys, old_keys = self._storage.extend(data)
+               priorities: Union[float, Tensor] = 1.0,
+               stacked: bool = False) -> torch.Tensor:
+        new_keys, old_keys = self._storage.extend(data, stacked)
         if isinstance(priorities, torch.Tensor):
             priorities = priorities.numpy().astype(np.float64)
         elif isinstance(priorities, np.ndarray):

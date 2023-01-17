@@ -41,6 +41,8 @@ inline std::vector<std::string> SortedKeys<py::dict>(const py::dict& dict) {
   return ret;
 }
 
+py::object First(const py::object& obj);
+
 py::tuple FlattenNested(const py::object& obj);
 
 py::object MapNested(std::function<py::object(const py::object&)> func,

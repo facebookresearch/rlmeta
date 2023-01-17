@@ -32,7 +32,7 @@ void Schema::Reset() {
   }
 }
 
-bool Schema::FromPythonImpl(const py::object& obj, bool packed_input,
+bool Schema::FromPythonImpl(const py::object& obj, bool stacked,
                             int64_t& index) {
   if (utils::IsTorchTensor(obj)) {
     const torch::Tensor src = utils::PyObjectToTorchTensor(obj);
@@ -40,9 +40,8 @@ bool Schema::FromPythonImpl(const py::object& obj, bool packed_input,
     meta_.emplace();
     meta_->index = index++;
     meta_->dtype = static_cast<int64_t>(src.scalar_type());
-    meta_->shape.assign(
-        src.sizes().cbegin() + static_cast<int64_t>(packed_input),
-        src.sizes().cend());
+    meta_->shape.assign(src.sizes().cbegin() + static_cast<int64_t>(stacked),
+                        src.sizes().cend());
     return true;
   }
 
@@ -53,8 +52,8 @@ bool Schema::FromPythonImpl(const py::object& obj, bool packed_input,
     vec_->reserve(src.size());
     for (const auto x : src) {
       Schema& cur = vec_->emplace_back();
-      if (!cur.FromPythonImpl(py::reinterpret_borrow<py::object>(x),
-                              packed_input, index)) {
+      if (!cur.FromPythonImpl(py::reinterpret_borrow<py::object>(x), stacked,
+                              index)) {
         size_ = 0;
         vec_.reset();
         return false;
@@ -71,8 +70,8 @@ bool Schema::FromPythonImpl(const py::object& obj, bool packed_input,
     vec_->reserve(src.size());
     for (const auto x : src) {
       Schema& cur = vec_->emplace_back();
-      if (!cur.FromPythonImpl(py::reinterpret_borrow<py::object>(x),
-                              packed_input, index)) {
+      if (!cur.FromPythonImpl(py::reinterpret_borrow<py::object>(x), stacked,
+                              index)) {
         size_ = 0;
         vec_.reset();
         return false;
@@ -91,7 +90,7 @@ bool Schema::FromPythonImpl(const py::object& obj, bool packed_input,
     for (const std::string& k : keys) {
       auto& cur = map_->emplace_back(k, Schema());
       if (!cur.second.FromPythonImpl(
-              py::reinterpret_borrow<py::object>(src[py::str(k)]), packed_input,
+              py::reinterpret_borrow<py::object>(src[py::str(k)]), stacked,
               index)) {
         size_ = 0;
         map_.reset();

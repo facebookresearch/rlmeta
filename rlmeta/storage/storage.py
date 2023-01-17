@@ -54,6 +54,7 @@ class Storage(abc.ABC):
 
     @abc.abstractmethod
     def extend(self,
-               data: Sequence[NestedTensor]) -> Tuple[np.ndarray, np.ndarray]:
+               data: Union[NestedTensor, Sequence[NestedTensor]],
+               stacked: bool = False) -> Tuple[np.ndarray, np.ndarray]:
         """
         """

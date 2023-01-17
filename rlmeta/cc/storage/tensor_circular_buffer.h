@@ -122,6 +122,9 @@ class TensorCircularBuffer : public CircularBufferBase {
     return ExtendImpl(src);
   }
 
+  std::pair<py::array_t<int64_t>, py::array_t<int64_t>> ExtendStacked(
+      const py::object& src);
+
   py::object DumpData() const { return RecoverNested(data_); }
 
   py::array_t<int64_t> DumpKeys() const { return utils::AsNumpyArray(keys_); }
@@ -130,7 +133,7 @@ class TensorCircularBuffer : public CircularBufferBase {
                 int64_t cursor, int64_t next_key);
 
  protected:
-  void Init(const py::object& o);
+  void Init(const py::object& o, bool stacked);
 
   py::object RecoverNested(const std::vector<torch::Tensor>& src) const;
 
