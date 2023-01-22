@@ -105,6 +105,9 @@ class RunningMoments(nn.Module):
 
 
 class RunningTDError(nn.Module):
+    """
+    Running TD Error estimation introduced by https://arxiv.org/abs/2105.05347
+    """
 
     def __init__(self,
                  size: Union[int, Tuple[int]],
