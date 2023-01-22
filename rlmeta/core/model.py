@@ -11,6 +11,8 @@ from enum import IntEnum
 from typing import (Any, Awaitable, Callable, Dict, Optional, Sequence, Tuple,
                     Union)
 
+from rich.console import Console
+
 import numpy as np
 
 import torch
@@ -27,6 +29,8 @@ from rlmeta.core.server import Server
 from rlmeta.core.types import NestedTensor
 from rlmeta.samplers import UniformSampler
 from rlmeta.storage.circular_buffer import CircularBuffer
+
+console = Console()
 
 
 class ModelVersion(IntEnum):
@@ -84,6 +88,7 @@ class RemotableModelPool(remote.Remotable, Launchable):
             random_utils.manual_seed(self._seed)
 
         self._model.init_model()
+        console.log(self._model)
 
     def model(self, version: int = ModelVersion.LATEST) -> nn.Module:
         return (self._model if version == ModelVersion.LATEST else
