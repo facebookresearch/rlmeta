@@ -47,11 +47,15 @@ class AtariDQNNet(nn.Module):
 
     def init_model(self) -> None:
         if self._spectral_norm:
-            # Apply SN[-2] in https://arxiv.org/pdf/2105.05246.pdf
-            nn.utils.parametrizations.spectral_norm(
-                self._head._mlp_a._layers[-3])
-            nn.utils.parametrizations.spectral_norm(
-                self._head._mlp_v._layers[-3])
+            # Apply SN[-2] in https://arxiv.org/abs/2105.05246
+            if self._dueling_dqn:
+                nn.utils.parametrizations.spectral_norm(
+                    self._head._mlp_a._layers[-3])
+                nn.utils.parametrizations.spectral_norm(
+                    self._head._mlp_v._layers[-3])
+            else:
+                nn.utils.parametrizations.spectral_norm(
+                    self._head._mlp._layers[-3])
 
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
         x = observation.float() / 255.0
