@@ -197,7 +197,6 @@ class ApexDQNAgent(Agent):
             t0 = time.perf_counter()
             keys, batch, probabilities = self._replay_buffer.sample(
                 self._batch_size)
-            # self._batch_size, replacement=True)
             t1 = time.perf_counter()
             step_stats = self._train_step(keys, batch, probabilities)
             t2 = time.perf_counter()
