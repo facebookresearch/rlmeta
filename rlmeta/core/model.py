@@ -84,7 +84,6 @@ class RemotableModelPool(remote.Remotable, Launchable):
             random_utils.manual_seed(self._seed)
 
         self._model.init_model()
-        print(self._model)
 
     def model(self, version: int = ModelVersion.LATEST) -> nn.Module:
         return (self._model if version == ModelVersion.LATEST else

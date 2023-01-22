@@ -15,13 +15,14 @@ import torch.nn.functional as F
 from rich.console import Console
 from rich.progress import track
 
+import rlmeta.utils.data_utils as data_utils
 import rlmeta.utils.nested_utils as nested_utils
 
 from rlmeta.agents.agent import Agent, AgentFactory
 from rlmeta.core.controller import Controller, ControllerLike, Phase
 from rlmeta.core.model import ModelLike
 from rlmeta.core.replay_buffer import ReplayBufferLike
-from rlmeta.core.rescalers import SqrtRescaler
+from rlmeta.core.rescalers import SignedHyperbolicRescaler
 from rlmeta.core.types import Action, TimeStep
 from rlmeta.core.types import NestedTensor
 from rlmeta.utils.stats_dict import StatsDict
@@ -33,28 +34,25 @@ console = Console()
 class ApexDQNAgent(Agent):
 
     def __init__(
-        self,
-        model: ModelLike,
-        eps: float = 0.1,
-        replay_buffer: Optional[ReplayBufferLike] = None,
-        controller: Optional[ControllerLike] = None,
-        optimizer: Optional[torch.optim.Optimizer] = None,
-        batch_size: int = 512,
-        max_grad_norm: float = 40.0,
-        n_step: int = 1,
-        gamma: float = 0.99,
-        importance_sampling_exponent: float = 0.4,
-        max_abs_reward: Optional[int] = None,
-        rescale_value: bool = False,
-        value_clipping_eps: Optional[float] = 0.2,
-        fr_kappa: Optional[float] = 1.0,
-        target_sync_period: Optional[int] = None,
-        learning_starts: Optional[int] = None,
-        model_push_period: int = 10,
-        local_batch_size: int = 1024,
-        collate_fn: Optional[Callable[[Sequence[NestedTensor]],
-                                      NestedTensor]] = None,
-        additional_models_to_update: Optional[List[ModelLike]] = None,
+            self,
+            model: ModelLike,
+            eps: float = 0.1,
+            replay_buffer: Optional[ReplayBufferLike] = None,
+            controller: Optional[ControllerLike] = None,
+            optimizer: Optional[torch.optim.Optimizer] = None,
+            batch_size: int = 512,
+            max_grad_norm: float = 40.0,
+            n_step: int = 1,
+            gamma: float = 0.99,
+            importance_sampling_exponent: float = 0.4,
+            max_abs_reward: Optional[int] = None,
+            rescale_value: bool = False,
+            value_clipping_eps: Optional[float] = 0.2,
+            fr_kappa: Optional[float] = 1.0,
+            target_sync_period: Optional[int] = None,
+            learning_starts: Optional[int] = None,
+            model_push_period: int = 10,
+            additional_models_to_update: Optional[List[ModelLike]] = None
     ) -> None:
         super().__init__()
 
@@ -77,14 +75,11 @@ class ApexDQNAgent(Agent):
         self._fr_kappa = fr_kappa
 
         self._rescale_value = rescale_value
-        self._rescaler = SqrtRescaler() if rescale_value else None
+        self._rescaler = SignedHyperbolicRescaler() if rescale_value else None
 
         self._target_sync_period = target_sync_period
         self._learning_starts = learning_starts
         self._model_push_period = model_push_period
-
-        self._local_batch_size = local_batch_size
-        self._collate_fn = torch.stack if collate_fn is None else collate_fn
 
         self._additional_models_to_update = additional_models_to_update
 
@@ -92,8 +87,6 @@ class ApexDQNAgent(Agent):
         self._trajectory = []
         self._update_priorities_future = None
         self._eval_executor = None
-
-        self._running_td_error = None
 
     def reset(self) -> None:
         self._step_counter = 0
@@ -204,7 +197,7 @@ class ApexDQNAgent(Agent):
             t0 = time.perf_counter()
             keys, batch, probabilities = self._replay_buffer.sample(
                 self._batch_size)
-                # self._batch_size, replacement=True)
+            # self._batch_size, replacement=True)
             t1 = time.perf_counter()
             step_stats = self._train_step(keys, batch, probabilities)
             t2 = time.perf_counter()
@@ -289,42 +282,14 @@ class ApexDQNAgent(Agent):
         return replay
 
     def _send_replay(self, replay: List[NestedTensor]) -> None:
-        batch = []
-        while replay:
-            batch.append(replay.pop())
-            if len(batch) >= self._local_batch_size:
-                b = nested_utils.collate_nested(self._collate_fn, batch)
-                priorities = self._model.compute_priority(
-                    b["obs"], b["action"], b["target"])
-                self._replay_buffer.extend(batch, priorities)
-                batch.clear()
-        if batch:
-            b = nested_utils.collate_nested(self._collate_fn, batch)
-            priorities = self._model.compute_priority(b["obs"], b["action"],
-                                                      b["target"])
-            self._replay_buffer.extend(batch, priorities)
-            batch.clear()
+        batch = data_utils.stack_fields(replay)
+        priorities = (batch["target"] - batch["q"]).abs_().squeeze_(-1)
+        self._replay_buffer.extend(batch, priorities, stacked=True)
 
     async def _async_send_replay(self, replay: List[NestedTensor]) -> None:
-        batch = nested_utils.collate_nested(self._collate_fn, replay)
-        priorities = (batch["target"] - batch["q"]).abs().squeeze(-1)
+        batch = data_utils.stack_fields(replay)
+        priorities = (batch["target"] - batch["q"]).abs_().squeeze_(-1)
         await self._replay_buffer.async_extend(batch, priorities, stacked=True)
-
-        # batch = []
-        # while replay:
-        #     batch.append(replay.pop())
-        #     if len(batch) >= self._local_batch_size:
-        #         b = nested_utils.collate_nested(self._collate_fn, batch)
-        #         priorities = await self._model.async_compute_priority(
-        #             b["obs"], b["action"], b["target"])
-        #         await self._replay_buffer.async_extend(batch, priorities)
-        #         batch.clear()
-        # if batch:
-        #     b = nested_utils.collate_nested(self._collate_fn, batch)
-        #     priorities = await self._model.async_compute_priority(
-        #         b["obs"], b["action"], b["target"])
-        #     await self._replay_buffer.async_extend(batch, priorities)
-        #     batch.clear()
 
     def _train_step(self, keys: torch.Tensor, batch: NestedTensor,
                     probabilities: torch.Tensor) -> Dict[str, float]:
@@ -366,7 +331,6 @@ class ApexDQNAgent(Agent):
             "td_error": td_err.detach().mean().item(),
             "loss": loss.detach().mean().item(),
             "grad_norm": grad_norm.detach().mean().item(),
-            # "td_error_std": self._running_td_error.std().detach().item(),
         }
 
     def _loss(self, target: torch.Tensor, q: torch.Tensor,
@@ -375,27 +339,13 @@ class ApexDQNAgent(Agent):
             loss = F.mse_loss(q, target, reduction="none")
             if self._fr_kappa is not None:
                 # Apply functional regularization.
-                # https://arxiv.org/pdf/2106.02613.pdf
+                # https://arxiv.org/abs/2106.02613
                 loss += (self._fr_kappa *
                          F.mse_loss(q, behavior_q, reduction="none"))
             return (loss.squeeze(-1) * weight).mean()
 
         # Apply approximate trust region value update.
-        # https://arxiv.org/pdf/2209.07550.pdf
-
-        # if self._running_td_error is None:
-        #     self._running_td_error = RunningMoments(size=1, dtype=torch.float64)
-        #     self._running_td_error.to(target.device)
-        #
-        # with torch.no_grad():
-        #     td_error = target - q.detach()
-        #     self._running_td_error.update(td_error)
-        #     std = self._running_td_error.std().to(td_error.dtype)
-        #     std = torch.maximum(std, td_error.std(unbiased=False))
-        #     std.clamp_(0.01)
-        # value_clipping_eps = self._value_clipping_eps * std
-        # clipped_q = behavior_q + torch.clamp(
-        #     q - behavior_q, -value_clipping_eps, value_clipping_eps)
+        # https://arxiv.org/abs/2209.07550
         clipped_q = behavior_q + torch.clamp(
             q - behavior_q, -self._value_clipping_eps, self._value_clipping_eps)
         err1 = F.mse_loss(q, target, reduction="none")
@@ -404,7 +354,7 @@ class ApexDQNAgent(Agent):
 
         if self._fr_kappa is not None:
             # Apply functional regularization.
-            # https://arxiv.org/pdf/2106.02613.pdf
+            # https://arxiv.org/abs/2106.02613
             loss += (self._fr_kappa *
                      F.mse_loss(q, behavior_q, reduction="none"))
         return (loss.squeeze(-1) * weight).mean()
@@ -430,28 +380,25 @@ class ApexDQNAgent(Agent):
 class ApexDQNAgentFactory(AgentFactory):
 
     def __init__(
-        self,
-        model: ModelLike,
-        eps_func: Callable[[int], float],
-        replay_buffer: Optional[ReplayBufferLike] = None,
-        controller: Optional[ControllerLike] = None,
-        optimizer: Optional[torch.optim.Optimizer] = None,
-        batch_size: int = 512,
-        max_grad_norm: float = 40.0,
-        n_step: int = 1,
-        gamma: float = 0.99,
-        importance_sampling_exponent: float = 0.4,
-        max_abs_reward: Optional[int] = None,
-        rescale_value: bool = False,
-        value_clipping_eps: Optional[float] = 0.2,
-        fr_kappa: Optional[float] = 1.0,
-        target_sync_period: Optional[int] = None,
-        learning_starts: Optional[int] = None,
-        model_push_period: int = 10,
-        local_batch_size: int = 1024,
-        collate_fn: Optional[Callable[[Sequence[NestedTensor]],
-                                      NestedTensor]] = None,
-        additional_models_to_update: Optional[List[ModelLike]] = None,
+            self,
+            model: ModelLike,
+            eps_func: Callable[[int], float],
+            replay_buffer: Optional[ReplayBufferLike] = None,
+            controller: Optional[ControllerLike] = None,
+            optimizer: Optional[torch.optim.Optimizer] = None,
+            batch_size: int = 512,
+            max_grad_norm: float = 40.0,
+            n_step: int = 1,
+            gamma: float = 0.99,
+            importance_sampling_exponent: float = 0.4,
+            max_abs_reward: Optional[int] = None,
+            rescale_value: bool = False,
+            value_clipping_eps: Optional[float] = 0.2,
+            fr_kappa: Optional[float] = 1.0,
+            target_sync_period: Optional[int] = None,
+            learning_starts: Optional[int] = None,
+            model_push_period: int = 10,
+            additional_models_to_update: Optional[List[ModelLike]] = None
     ) -> None:
         self._model = model
         self._eps_func = eps_func
@@ -470,8 +417,6 @@ class ApexDQNAgentFactory(AgentFactory):
         self._target_sync_period = target_sync_period
         self._learning_starts = learning_starts
         self._model_push_period = model_push_period
-        self._local_batch_size = local_batch_size
-        self._collate_fn = collate_fn
         self._additional_models_to_update = additional_models_to_update
 
     def __call__(self, index: int) -> ApexDQNAgent:
@@ -497,8 +442,6 @@ class ApexDQNAgentFactory(AgentFactory):
             self._target_sync_period,
             self._learning_starts,
             self._model_push_period,
-            self._local_batch_size,
-            self._collate_fn,
             additional_models_to_update=self._additional_models_to_update)
 
 
@@ -513,7 +456,7 @@ class ConstantEpsFunc:
 
 class FlexibleEpsFunc:
     """
-    Eps function following https://arxiv.org/pdf/1805.11593.pdf.
+    Eps function following https://arxiv.org/abs/1803.00933
     """
 
     def __init__(self, eps: float, num: int, alpha: float = 7.0) -> None:
@@ -524,5 +467,4 @@ class FlexibleEpsFunc:
     def __call__(self, index: int) -> float:
         if self._num == 1:
             return self._eps
-        # return self._eps**(3.0 - 2.0 * (index / (self._num - 1)))
         return self._eps**(1.0 + self._alpha * (index / (self._num - 1)))

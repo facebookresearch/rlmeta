@@ -25,11 +25,13 @@ class AtariDQNNet(nn.Module):
     def __init__(self,
                  num_actions: int,
                  network="nature",
-                 dueling_dqn: bool = True) -> None:
+                 dueling_dqn: bool = True,
+                 spectral_norm: bool = True) -> None:
         super().__init__()
         self._num_actions = num_actions
         self._network = network.lower()
         self._dueling_dqn = dueling_dqn
+        self._spectral_norm = spectral_norm
 
         head_cls = DuelingDQNHead if dueling_dqn else DQNHead
         if self._network == "nature":
@@ -44,8 +46,12 @@ class AtariDQNNet(nn.Module):
             assert False, "Unsupported network."
 
     def init_model(self) -> None:
-        nn.utils.parametrizations.spectral_norm(self._head._mlp_a._layers[-3])
-        nn.utils.parametrizations.spectral_norm(self._head._mlp_v._layers[-3])
+        if self._spectral_norm:
+            # Apply SN[-2] in https://arxiv.org/pdf/2105.05246.pdf
+            nn.utils.parametrizations.spectral_norm(
+                self._head._mlp_a._layers[-3])
+            nn.utils.parametrizations.spectral_norm(
+                self._head._mlp_v._layers[-3])
 
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
         x = observation.float() / 255.0
@@ -60,19 +66,22 @@ class AtariDQNModel(DQNModel):
                  num_actions: int,
                  network: str = "nature",
                  dueling_dqn: bool = True,
+                 spectral_norm: bool = True,
                  double_dqn: bool = False) -> None:
         super().__init__()
 
         self._num_actions = num_actions
         self._network = network.lower()
         self._dueling_dqn = dueling_dqn
+        self._spectral_norm = spectral_norm
         self._double_dqn = double_dqn
 
         # Bootstrapping with online network when double_dqn = False.
         # https://arxiv.org/pdf/2209.07550.pdf
         self._online_net = AtariDQNNet(num_actions,
                                        network=network,
-                                       dueling_dqn=dueling_dqn)
+                                       dueling_dqn=dueling_dqn,
+                                       spectral_norm=spectral_norm)
         self._target_net = copy.deepcopy(
             self._online_net) if double_dqn else None
 
@@ -106,12 +115,6 @@ class AtariDQNModel(DQNModel):
             q = q.gather(dim=-1, index=action)
 
         return action, q, v
-
-    @remote.remote_method(batch_size=None)
-    def compute_priority(self, observation: NestedTensor, action: torch.Tensor,
-                         target: torch.Tensor) -> torch.Tensor:
-        td_err = self.td_error(observation, action, target)
-        return td_err.squeeze(-1).abs()
 
     def sync_target_net(self) -> None:
         if self._target_net is not None:

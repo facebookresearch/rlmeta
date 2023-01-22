@@ -40,10 +40,11 @@ def main(cfg):
     env = atari_wrapper.make_atari_env(**cfg.env)
     model = AtariDQNModel(env.action_space.n,
                           network=cfg.network,
+                          dueling_dqn=cfg.dueling_dqn,
+                          spectral_norm=cfg.spectral_norm,
                           double_dqn=cfg.double_dqn).to(cfg.train_device)
-    # model_pool = RemotableModelPool(copy.deepcopy(model).to(cfg.infer_device),
-    #                                 seed=cfg.seed)
     infer_model = copy.deepcopy(model).to(cfg.infer_device)
+    # Disable eval mode because there are some issues for SpectralNorm.
     # infer_model.eval()
     model_pool = RemotableModelPool(infer_model, seed=cfg.seed)
     optimizer = make_optimizer(model.parameters(), **cfg.optimizer)

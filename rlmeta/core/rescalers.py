@@ -160,10 +160,34 @@ class StdRescaler(Rescaler):
             x * self._running_moments.std(self._ddof, self._eps)).to(x.dtype)
 
 
-class SqrtRescaler(Rescaler):
+# class SqrtRescaler(Rescaler):
+#     """
+#     Introduced by R2D2 paper.
+#     https://openreview.net/pdf?id=r1lyTjAqYX
+#     """
+#
+#     def __init__(self, eps: float = 1e-3) -> None:
+#         super().__init__()
+#         self._eps = eps
+#
+#     @property
+#     def eps(self) -> float:
+#         return self._eps
+#
+#     def rescale(self, x: torch.Tensor) -> torch.Tensor:
+#         return x.sign() * ((x.abs() + 1.0).sqrt() - 1.0) + self.eps * x
+#
+#     def recover(self, x: torch.Tensor) -> torch.Tensor:
+#         if self._eps == 0.0:
+#             return x.sign() * (x.square() + 2.0 * x.abs())
+#         r = ((1.0 + 4.0 * self.eps *
+#               (x.abs() + 1.0 + self.eps)).sqrt() - 1.0) / (2.0 * self.eps)
+#         return x.sign() * (r.square() - 1.0)
+
+
+class SignedHyperbolicRescaler(Rescaler):
     """
-    Introduced by R2D2 paper.
-    https://openreview.net/pdf?id=r1lyTjAqYX
+    Transformed Bellman Operator in https://arxiv.org/abs/1805.11593.
     """
 
     def __init__(self, eps: float = 1e-3) -> None:
