@@ -160,10 +160,9 @@ class StdRescaler(Rescaler):
             x * self._running_moments.std(self._ddof, self._eps)).to(x.dtype)
 
 
-class SqrtRescaler(Rescaler):
+class SignedHyperbolicRescaler(Rescaler):
     """
-    Introduced by R2D2 paper.
-    https://openreview.net/pdf?id=r1lyTjAqYX
+    Transformed Bellman Operator in https://arxiv.org/abs/1805.11593.
     """
 
     def __init__(self, eps: float = 1e-3) -> None:

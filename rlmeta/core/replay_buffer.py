@@ -8,7 +8,9 @@ import time
 import logging
 
 from typing import Callable, Optional, Sequence, Tuple, Union
+
 from rich.console import Console
+
 import numpy as np
 import torch
 

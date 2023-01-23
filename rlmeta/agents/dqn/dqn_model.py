@@ -61,12 +61,6 @@ class DQNModel(RemotableModel):
         """
 
     @abc.abstractmethod
-    def compute_priority(self, observation: NestedTensor, action: torch.Tensor,
-                         target: torch.Tensor) -> torch.Tensor:
-        """
-        """
-
-    @abc.abstractmethod
     def sync_target_net(self) -> None:
         """
         """

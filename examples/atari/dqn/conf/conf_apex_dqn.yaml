@@ -21,29 +21,34 @@ seed: null
 table_view: False
 
 # Training configs.
-num_training_rollouts: 32
-num_training_workers: 16
+num_training_rollouts: 64
+num_training_workers: 32
 
-eps: 0.1
+eps: 0.4
 
 replay_buffer_size: 1000000
 priority_exponent: 0.6
-prefetch: 2
+prefetch: 1
 
 importance_sampling_exponent: 0.4
 
 max_abs_reward: null
 rescale_value: True
 value_clipping_eps: 0.2
+fr_kappa: 1.0
 
-network: "nature"
+network: "impala"
+dueling_dqn: True
+spectral_norm: True
+
 double_dqn: False
 target_sync_period: null
 
-gamma: 0.99
+gamma: 0.997
 n_step: 5
 
 batch_size: 512
+max_grad_norm: 40.0
 learning_starts: 65536
 model_push_period: 10
 
