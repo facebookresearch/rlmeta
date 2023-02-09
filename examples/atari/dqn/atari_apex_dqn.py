@@ -44,8 +44,8 @@ def main(cfg):
                           spectral_norm=cfg.spectral_norm,
                           double_dqn=cfg.double_dqn).to(cfg.train_device)
     infer_model = copy.deepcopy(model).to(cfg.infer_device)
-    # Disable eval mode because there are some issues for SpectralNorm.
-    # infer_model.eval()
+    infer_model.eval()
+
     model_pool = RemotableModelPool(infer_model, seed=cfg.seed)
     optimizer = make_optimizer(model.parameters(), **cfg.optimizer)
 
