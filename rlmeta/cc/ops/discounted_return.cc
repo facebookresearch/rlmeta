@@ -23,7 +23,7 @@ void DiscountedReturnImpl(const torch::Tensor& reward, T gamma,
   const T* r_data = reward_contiguous.data_ptr<T>();
   T* g_data = discounted_return.data_ptr<T>();
   T g = 0;
-  for (int i = n - 1; i >= 0; --i) {
+  for (int64_t i = n - 1; i >= 0; --i) {
     g = r_data[i] + gamma * g;
     g_data[i] = g;
   }
@@ -48,7 +48,7 @@ void DiscountedReturnImpl(const torch::Tensor& reward,
   const T* gamma_data = gamma_coutiguous.data_ptr<T>();
   T* g_data = discounted_return.data_ptr<T>();
   T g = 0;
-  for (int i = n - 1; i >= 0; --i) {
+  for (int64_t i = n - 1; i >= 0; --i) {
     g = r_data[i] + gamma_data[i] * g;
     g_data[i] = g;
   }
@@ -76,10 +76,12 @@ torch::Tensor DiscountedReturn(const torch::Tensor& reward,
 
 void DefineDiscountedReturnOp(py::module& m) {
   m.def("discounted_return",
-        py::overload_cast<const torch::Tensor&, double>(&DiscountedReturn))
+        py::overload_cast<const torch::Tensor&, double>(&DiscountedReturn),
+        py::arg("reward"), py::arg("gamma"))
       .def("discounted_return",
            py::overload_cast<const torch::Tensor&, const torch::Tensor&>(
-               &DiscountedReturn));
+               &DiscountedReturn),
+           py::arg("reward"), py::arg("gamma"));
 }
 
 }  // namespace ops
