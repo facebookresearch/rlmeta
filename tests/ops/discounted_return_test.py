@@ -44,7 +44,7 @@ class DiscountReturnTest(TestCaseBase):
         self.assert_tensor_close(g, expected_g, rtol=self.rtol, atol=self.atol)
 
         reward = torch.randn(n, 1)
-        gamma = torch.rand(n)
+        gamma = torch.rand(n, 1)
         g = ops.discounted_return(reward, gamma)
         expected_g = self._discounted_return(reward, gamma)
         self.assert_tensor_close(g, expected_g, rtol=self.rtol, atol=self.atol)
