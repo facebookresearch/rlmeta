@@ -6,6 +6,7 @@
 #include "rlmeta/cc/ops/ops.h"
 
 #include "rlmeta/cc/ops/discounted_return.h"
+#include "rlmeta/cc/ops/generalized_advantage_estimation.h"
 #include "rlmeta/cc/ops/groupby.h"
 
 namespace rlmeta {
@@ -15,6 +16,7 @@ void DefineOps(py::module& m) {
       m.def_submodule("ops", "ops submodule of \"_rlmeta_extension\"");
 
   ops::DefineDiscountedReturnOp(sub);
+  ops::DefineGeneralizedAdvantageEstimationOp(sub);
   ops::DefineGroupByOp(sub);
 }
 
