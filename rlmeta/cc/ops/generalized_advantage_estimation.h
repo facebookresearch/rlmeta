@@ -9,23 +9,23 @@
 #include <torch/extension.h>
 #include <torch/torch.h>
 
+#include <optional>
+
 namespace py = pybind11;
 
 namespace rlmeta {
 namespace ops {
 
 // Compute the GAE for a single episode.
-// If terminated == false, len(value) == len(reward) + 1 to include the value
-// for the last trucated step.
-torch::Tensor GeneralizedAdvantageEstimation(const torch::Tensor& reward,
-                                             const torch::Tensor& value,
-                                             double gamma, double lambda,
-                                             bool terminated);
-torch::Tensor GeneralizedAdvantageEstimation(const torch::Tensor& reward,
-                                             const torch::Tensor& value,
-                                             const torch::Tensor& gamma,
-                                             const torch::Tensor& lambda,
-                                             bool terminated);
+// last_v is used for truncated trajectories.
+torch::Tensor GeneralizedAdvantageEstimation(
+    const torch::Tensor& reward, const torch::Tensor& value, double gamma,
+    double lambda, const std::optional<torch::Tensor>& last_v = std::nullopt);
+
+torch::Tensor GeneralizedAdvantageEstimation(
+    const torch::Tensor& reward, const torch::Tensor& value,
+    const torch::Tensor& gamma, const torch::Tensor& lambda,
+    const std::optional<torch::Tensor>& last_v = std::nullopt);
 
 void DefineGeneralizedAdvantageEstimationOp(py::module& m);
 
