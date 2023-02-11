@@ -5,7 +5,7 @@
 
 import unittest
 
-from typing import Union
+from typing import Optional, Union
 
 import torch
 
@@ -26,34 +26,21 @@ class GeneralizedAdvantageEstimationTest(TestCaseBase):
         gae_lambda = torch.rand(1).item()
 
         reward = torch.randn(n)
-        value = torch.randn(n + 1)
-        gae = ops.generalized_advantage_estimation(reward,
-                                                   value,
-                                                   gamma,
-                                                   gae_lambda,
-                                                   terminated=True)
-        expected_gae = self._gae(reward,
-                                 value,
-                                 gamma,
-                                 gae_lambda,
-                                 terminated=True)
+        value = torch.randn(n)
+        gae = ops.generalized_advantage_estimation(reward, value, gamma,
+                                                   gae_lambda)
+        expected_gae = self._gae(reward, value, gamma, gae_lambda)
         self.assert_tensor_close(gae,
                                  expected_gae,
                                  rtol=self.rtol,
                                  atol=self.atol)
 
         reward = torch.randn(n, 1)
-        value = torch.randn(n + 1, 1)
-        gae = ops.generalized_advantage_estimation(reward,
-                                                   value,
-                                                   gamma,
-                                                   gae_lambda,
-                                                   terminated=False)
-        expected_gae = self._gae(reward,
-                                 value,
-                                 gamma,
-                                 gae_lambda,
-                                 terminated=False)
+        value = torch.randn(n, 1)
+        last_v = torch.randn(1)
+        gae = ops.generalized_advantage_estimation(reward, value, gamma,
+                                                   gae_lambda, last_v)
+        expected_gae = self._gae(reward, value, gamma, gae_lambda, last_v)
         self.assert_tensor_close(gae,
                                  expected_gae,
                                  rtol=self.rtol,
@@ -63,56 +50,39 @@ class GeneralizedAdvantageEstimationTest(TestCaseBase):
         n = 200
 
         reward = torch.randn(n)
-        value = torch.randn(n + 1)
+        value = torch.randn(n)
         gamma = torch.rand(1)
         gae_lambda = torch.rand(1)
-        gae = ops.generalized_advantage_estimation(reward,
-                                                   value,
-                                                   gamma,
-                                                   gae_lambda,
-                                                   terminated=True)
-        expected_gae = self._gae(reward,
-                                 value,
-                                 gamma,
-                                 gae_lambda,
-                                 terminated=True)
+        gae = ops.generalized_advantage_estimation(reward, value, gamma,
+                                                   gae_lambda)
+        expected_gae = self._gae(reward, value, gamma, gae_lambda)
         self.assert_tensor_close(gae,
                                  expected_gae,
                                  rtol=self.rtol,
                                  atol=self.atol)
 
         reward = torch.randn(n, 1)
-        value = torch.randn(n + 1, 1)
+        value = torch.randn(n, 1)
         gamma = torch.rand(n, 1)
         gae_lambda = torch.rand(n, 1)
-        gae = ops.generalized_advantage_estimation(reward,
-                                                   value,
-                                                   gamma,
-                                                   gae_lambda,
-                                                   terminated=False)
-        expected_gae = self._gae(reward,
-                                 value,
-                                 gamma,
-                                 gae_lambda,
-                                 terminated=False)
+        last_v = torch.randn(1)
+        gae = ops.generalized_advantage_estimation(reward, value, gamma,
+                                                   gae_lambda, last_v)
+        expected_gae = self._gae(reward, value, gamma, gae_lambda, last_v)
         self.assert_tensor_close(gae,
                                  expected_gae,
                                  rtol=self.rtol,
                                  atol=self.atol)
 
-    def _gae(self, reward: torch.Tensor, value: torch.Tensor,
-             gamma: Union[float, torch.Tensor], gae_lambda: Union[float,
-                                                                  torch.Tensor],
-             terminated: bool) -> torch.Tensor:
+    def _gae(self,
+             reward: torch.Tensor,
+             value: torch.Tensor,
+             gamma: Union[float, torch.Tensor],
+             gae_lambda: Union[float, torch.Tensor],
+             last_v: Optional[torch.Tensor] = None) -> torch.Tensor:
         n = reward.size(0)
-
-        if terminated:
-            assert value.size(0) == n or value.size(0) == n + 1
-        else:
-            assert value.size(0) == n + 1
-
-        v = 0 if terminated else value[-1]
-        adv = 0
+        v = torch.zeros(1) if last_v is None else last_v
+        adv = torch.zeros(1)
         gae = []
         for i in range(n - 1, -1, -1):
             if isinstance(gamma, float):

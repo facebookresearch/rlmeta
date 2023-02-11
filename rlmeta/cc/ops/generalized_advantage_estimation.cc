@@ -20,25 +20,20 @@ T ValueAt(const T* v, int64_t n, int64_t k) {
 }
 
 template <typename T>
-void GeneralizedAdvantageEstimationImpl(const torch::Tensor& reward,
-                                        const torch::Tensor& value, T gamma,
-                                        T lambda, bool terminated,
-                                        torch::Tensor& gae) {
+void GeneralizedAdvantageEstimationImpl(
+    const torch::Tensor& reward, const torch::Tensor& value, T gamma, T lambda,
+    const std::optional<torch::Tensor>& last_v, torch::Tensor& gae) {
   assert(reward.dim() == 1 || (reward.dim() == 2 && reward.size(1) == 1));
   assert(value.dim() == 1 || (value.dim() == 2 && value.size(1) == 1));
-  const int64_t n = reward.size(0);
-  if (terminated) {
-    assert(value.size(0) == n || value.size(0) == n + 1);
-  } else {
-    assert(value.size(0) == n + 1);
-  }
+  assert(reward.sizes() == value.sizes());
 
   const torch::Tensor reward_contiguous = reward.contiguous();
   const torch::Tensor value_contiguous = value.contiguous();
+  const int64_t n = reward_contiguous.numel();
   const T* r_data = reward_contiguous.data_ptr<T>();
   const T* v_data = value_contiguous.data_ptr<T>();
   T* gae_data = gae.data_ptr<T>();
-  T v = terminated ? 0 : v_data[n];
+  T v = last_v.has_value() ? last_v->item<T>() : 0;
   T adv = 0;
   for (int64_t i = n - 1; i >= 0; --i) {
     const T delta = r_data[i] + gamma * v - v_data[i];
@@ -49,19 +44,13 @@ void GeneralizedAdvantageEstimationImpl(const torch::Tensor& reward,
 }
 
 template <typename T>
-void GeneralizedAdvantageEstimationImpl(const torch::Tensor& reward,
-                                        const torch::Tensor& value,
-                                        const torch::Tensor& gamma,
-                                        const torch::Tensor& lambda,
-                                        bool terminated, torch::Tensor& gae) {
+void GeneralizedAdvantageEstimationImpl(
+    const torch::Tensor& reward, const torch::Tensor& value,
+    const torch::Tensor& gamma, const torch::Tensor& lambda,
+    const std::optional<torch::Tensor>& last_v, torch::Tensor& gae) {
   assert(reward.dim() == 1 || (reward.dim() == 2 && reward.size(1) == 1));
   assert(value.dim() == 1 || (value.dim() == 2 && value.size(1) == 1));
-  const int64_t n = reward.size(0);
-  if (terminated) {
-    assert(value.size(0) == n || value.size(0) == n + 1);
-  } else {
-    assert(value.size(0) == n + 1);
-  }
+  assert(reward.sizes() == value.sizes());
   assert(gamma.numel() == 1 || gamma.sizes() == reward.sizes());
   assert(lambda.numel() == 1 || lambda.sizes() == reward.sizes());
 
@@ -69,6 +58,7 @@ void GeneralizedAdvantageEstimationImpl(const torch::Tensor& reward,
   const torch::Tensor value_contiguous = value.contiguous();
   const torch::Tensor gamma_contiguous = gamma.contiguous();
   const torch::Tensor lambda_contiguous = lambda.contiguous();
+  const int64_t n = reward_contiguous.numel();
   const T* r_data = reward_contiguous.data_ptr<T>();
   const T* v_data = value_contiguous.data_ptr<T>();
   const T* gamma_data = gamma_contiguous.data_ptr<T>();
@@ -76,7 +66,7 @@ void GeneralizedAdvantageEstimationImpl(const torch::Tensor& reward,
   const int64_t gamma_n = gamma_contiguous.numel();
   const int64_t lambda_n = lambda_contiguous.numel();
   T* gae_data = gae.data_ptr<T>();
-  T v = terminated ? 0 : v_data[n];
+  T v = last_v.has_value() ? last_v->item<T>() : 0;
   T adv = 0;
   for (int64_t i = n - 1; i >= 0; --i) {
     const T gamma_i = ValueAt(gamma_data, gamma_n, i);
@@ -90,46 +80,46 @@ void GeneralizedAdvantageEstimationImpl(const torch::Tensor& reward,
 
 }  // namespace
 
-torch::Tensor GeneralizedAdvantageEstimation(const torch::Tensor& reward,
-                                             const torch::Tensor& value,
-                                             double gamma, double lambda,
-                                             bool terminated) {
+torch::Tensor GeneralizedAdvantageEstimation(
+    const torch::Tensor& reward, const torch::Tensor& value, double gamma,
+    double lambda, const std::optional<torch::Tensor>& last_v) {
   torch::Tensor gae = torch::empty_like(reward);
-  AT_DISPATCH_FLOATING_TYPES(
-      reward.scalar_type(), "GeneralizedAdvantageEstimation", [&]() {
-        GeneralizedAdvantageEstimationImpl<scalar_t>(
-            reward, value, static_cast<scalar_t>(gamma),
-            static_cast<scalar_t>(lambda), terminated, gae);
-      });
+  AT_DISPATCH_FLOATING_TYPES(reward.scalar_type(),
+                             "GeneralizedAdvantageEstimation", [&]() {
+                               GeneralizedAdvantageEstimationImpl<scalar_t>(
+                                   reward, value, static_cast<scalar_t>(gamma),
+                                   static_cast<scalar_t>(lambda), last_v, gae);
+                             });
   return gae;
 }
 
-torch::Tensor GeneralizedAdvantageEstimation(const torch::Tensor& reward,
-                                             const torch::Tensor& value,
-                                             const torch::Tensor& gamma,
-                                             const torch::Tensor& lambda,
-                                             bool terminated) {
+torch::Tensor GeneralizedAdvantageEstimation(
+    const torch::Tensor& reward, const torch::Tensor& value,
+    const torch::Tensor& gamma, const torch::Tensor& lambda,
+    const std::optional<torch::Tensor>& last_v) {
   torch::Tensor gae = torch::empty_like(reward);
-  AT_DISPATCH_FLOATING_TYPES(
-      reward.scalar_type(), "GeneralizedAdvantageEstimation", [&]() {
-        GeneralizedAdvantageEstimationImpl<scalar_t>(reward, value, gamma,
-                                                     lambda, terminated, gae);
-      });
+  AT_DISPATCH_FLOATING_TYPES(reward.scalar_type(),
+                             "GeneralizedAdvantageEstimation", [&]() {
+                               GeneralizedAdvantageEstimationImpl<scalar_t>(
+                                   reward, value, gamma, lambda, last_v, gae);
+                             });
   return gae;
 }
 
 void DefineGeneralizedAdvantageEstimationOp(py::module& m) {
   m.def("generalized_advantage_estimation",
         py::overload_cast<const torch::Tensor&, const torch::Tensor&, double,
-                          double, bool>(&GeneralizedAdvantageEstimation),
+                          double, const std::optional<torch::Tensor>&>(
+            &GeneralizedAdvantageEstimation),
         py::arg("reward"), py::arg("value"), py::arg("gamma"),
-        py::arg("gae_lambda"), py::arg("terminated"))
+        py::arg("gae_lambda"), py::arg("last_v") = py::none())
       .def("generalized_advantage_estimation",
            py::overload_cast<const torch::Tensor&, const torch::Tensor&,
-                             const torch::Tensor&, const torch::Tensor&, bool>(
+                             const torch::Tensor&, const torch::Tensor&,
+                             const std::optional<torch::Tensor>&>(
                &GeneralizedAdvantageEstimation),
            py::arg("reward"), py::arg("value"), py::arg("gamma"),
-           py::arg("gae_lambda"), py::arg("terminated"));
+           py::arg("gae_lambda"), py::arg("last_v") = py::none());
 }
 
 }  // namespace ops
